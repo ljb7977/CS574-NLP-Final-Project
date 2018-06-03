@@ -1,6 +1,10 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from Vocabulary import Vocabulary
-
+from Models import NMT_RNNG
+import re
 
 class Data(object):
     def __init__(self):
@@ -8,54 +12,6 @@ class Data(object):
         self.tgt = []
         self.action = []
         self.trans = []
-
-
-class NMTRNNG(object):
-    def __init__(self,
-                 sourceVoc,
-                 targetVoc,
-                 actionVoc,
-                 trainData,
-                 devData,
-                 inputDim,
-                 inputActDim,
-                 hiddenEncDim,
-                 hiddenDim,
-                 hiddenActDim,
-                 scale,
-                 opt,
-                 clipThreshold,
-                 beamSize,
-                 maxLen,
-                 miniBatchSize,
-                 threadNum,
-                 learningRate,
-                 isTest,
-                 startIter,
-                 saveDirName):
-        self.sourceVoc = sourceVoc
-        self.targetVoc = targetVoc
-        self.actionVoc = actionVoc
-        self.trainData = trainData
-        self.devData = devData
-        self.inputDim = inputDim
-        self.hiddenEncDim = hiddenEncDim
-        self.hiddenDim = hiddenDim
-        self.hiddenActDim = hiddenActDim
-        self.scale = scale
-        self.opt = opt
-        self.clipThreshold = clipThreshold
-        self.beamSize = beamSize
-        self.maxLen = maxLen
-        self.miniBatchSize = miniBatchSize
-        self.threadNum = threadNum
-        self.learningRate = learningRate
-        self.isTest = isTest
-        self.startIter = startIter
-        self.saveDirName = saveDirName
-
-        # 여기서 모델 정의 파파팟
-
 
 
 class Translator(object):
@@ -82,7 +38,8 @@ class Translator(object):
         with open(src) as f:
             for line in f:
                 data.append(Data())
-                tokens = line.split(' \t')
+                tokens = re.split('[ \t\n]', line)
+                tokens = [x for x in tokens if x != '']
                 for token in tokens:
                     if token in self.sourceVoc.tokenIndex:
                         data[-1].src.append(self.sourceVoc.tokenIndex[token])
@@ -92,7 +49,8 @@ class Translator(object):
         idx = 0
         with open(tgt) as f:
             for line in f:
-                tokens = line.split(' \t')
+                tokens = re.split('[ \t\n]', line)
+                tokens = [x for x in tokens if x != '']
                 for token in tokens:
                     if token in self.targetVoc.tokenIndex:
                         data[idx].tgt.append(self.targetVoc.tokenIndex[token])
@@ -103,10 +61,11 @@ class Translator(object):
         idx = 0
         with open(act) as f:
             for line in f:
-                tokens = line.split(' \t')
+                tokens = re.split('[ \t\n]', line)
+                tokens = [x for x in tokens if x != '']
                 if tokens:
                     if tokens[0] in self.actionVoc.tokenIndex:
-                        data[idx].act.append(self.actionVoc.tokenIndex[tokens[0]])
+                        data[idx].action.append(self.actionVoc.tokenIndex[tokens[0]])
                     else:
                         print("Error: Unknown word except shift/reduce.")
                         exit(1)
@@ -132,35 +91,35 @@ class Translator(object):
               loadGradName,
               startIter):
 
-        self.nmtRNNG = NMTRNNG(self.sourceVoc,
-                               self.targetVoc,
-                               self.actionVoc,
-                               self.trainData,
-                               self.devData,
-                               inputDim,
-                               inputActDim,
-                               hiddenDim,
-                               hiddenEncDim,
-                               hiddenActDim,
-                               scale,
-                               'SGD',
-                               clipThreshold,
-                               beamSize,
-                               maxLen,
-                               miniBatchSize,
-                               threadNum,
-                               learningRate,
-                               False,
-                               startIter,
-                               saveDirName)
+        self.model = NMT_RNNG(self.sourceVoc,
+                              self.targetVoc,
+                              self.actionVoc,
+                              self.trainData,
+                              self.devData,
+                              inputDim,
+                              inputActDim,
+                              hiddenDim,
+                              hiddenEncDim,
+                              hiddenActDim,
+                              scale,
+                              'SGD',
+                              clipThreshold,
+                              beamSize,
+                              maxLen,
+                              miniBatchSize,
+                              threadNum,
+                              learningRate,
+                              False,
+                              startIter,
+                              saveDirName)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
 
         print("# of Training Data:\t" + str(len(self.trainData)))
         print("# of Development Data:\t" + str(len(self.devData)))
-        print("Source voc size: " + str(len(self.sourceVoc.tokenIndex)))
-        print("Target voc size: " + str(len(self.targetVoc.tokenIndex)))
-        print("Action voc size: " + str(len(self.actionVoc.tokenIndex)))
+        print("Source voc size: " + str(len(self.sourceVoc.tokenList)))
+        print("Target voc size: " + str(len(self.targetVoc.tokenList)))
+        print("Action voc size: " + str(len(self.actionVoc.tokenList)))
 
 
 

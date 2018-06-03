@@ -1,5 +1,5 @@
 from operator import itemgetter
-
+import re
 
 class Vocabulary(object):
     def __init__(self, trainFile, tokenFreqThreshold, Action_or_Language):
@@ -14,21 +14,21 @@ class Vocabulary(object):
         unkCount = 0
         eosCount = 0
         tokenCount = {}
-        tokens = []
         with open(trainFile) as f:
             for line in f:
                 eosCount += 1
-                tokens += line.split(' \t')
+                tokens = re.split('[ \t\n]', line)
+                tokens = [x for x in tokens if x != '']
                 for token in tokens:
                     if token in tokenCount:
                         tokenCount[token] += 1
                     else:
                         tokenCount[token] = 1
-        for token in tokens:
-            if tokenCount[token] >= tokenFreqThreshold:
-                self.tokenList.append((token, tokenCount[token]))
+        for token, count in tokenCount.items():
+            if count >= tokenFreqThreshold:
+                self.tokenList.append((token, count))
             else:
-                unkCount += tokenCount[token]
+                unkCount += count
         self.tokenList.sort(key=itemgetter(1))
         self.tokenList.reverse()    # (token, count) tuple이 count가 큰 순서로 정렬
         tokenList_len = len(self.tokenList)
@@ -42,25 +42,25 @@ class Vocabulary(object):
     def initAction(self, trainFile):
         self.tokenList = []  # list of (token, count)
         self.tokenIndex = {}  # token to index
-        tokens = []
         tokenCount = {}
         eosCount = 0
         with open(trainFile) as f:
             for line in f:
                 eosCount += 1
-                tokens += line.split(' \t')
+                tokens = re.split('[ \t\n]', line)
+                tokens = [x for x in tokens if x != '']
                 for token in tokens:
                     if token in tokenCount:
                         tokenCount[token] += 1
                     else:
                         tokenCount[token] = 1
-        for token in tokens:
+        for token, count in tokenCount.items():
             if "SHIFT" in token:
-                self.tokenList.append((token, tokenCount[token], 0))
+                self.tokenList.append((token, count, 0))
             elif "LEFT" in token:
-                self.tokenList.append((token, tokenCount[token], 1))
+                self.tokenList.append((token, count, 1))
             elif "RIGHT" in token:
-                self.tokenList.append((token, tokenCount[token], 2))
+                self.tokenList.append((token, count, 2))
             else:
                 print("Error: Non shift/reduce word.")
         self.tokenList.sort(key=itemgetter(1))
@@ -68,6 +68,8 @@ class Vocabulary(object):
         tokenList_len = len(self.tokenList)
         for i in range(tokenList_len):
             self.tokenIndex[self.tokenList[i][0]] = i
+
+
 
 
 
