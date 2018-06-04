@@ -107,7 +107,7 @@ class NMT_RNNG(nn.Module):
         self.prevPerp = float('inf')
 
     def biEncode(self, batch_trainData, train=True):
-        print(batch_trainData[0].src)
+        return
 
 
 

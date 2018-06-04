@@ -126,22 +126,18 @@ class Translator(object):
         print("Source voc size: " + str(len(self.sourceVoc.tokenList)))
         print("Target voc size: " + str(len(self.targetVoc.tokenList)))
         print("Action voc size: " + str(len(self.actionVoc.tokenList)))
-
-        # NMTRNNG::Grad  grad(nmtRNNG)
-
-        test = self.trainData[0]
+        print(self.sourceVoc.tokenIndex)
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
             permutation = list(range(0, len(self.trainData)))
             random.shuffle(permutation)
-            # bool status = nmtRNNG.trainOpenMP(grad);
             batchNumber = int(math.ceil(len(self.trainData)/miniBatchSize))
             for i in range(1, batchNumber+1):
                 print('Progress: ' + str(i) + '/' + str(batchNumber) + ' mini batches')
                 startIdx = (i-1)*miniBatchSize
-                endIdx = startIdx + miniBatchSize - 1
-                if endIdx >= len(self.trainData):
-                    endIdx = len(self.trainData) - 1
+                endIdx = startIdx + miniBatchSize
+                if endIdx > len(self.trainData):
+                    endIdx = len(self.trainData)
                 indices = permutation[startIdx:endIdx]
                 batch_trainData = [self.trainData[i] for i in indices]
                 status = self.train(batch_trainData)
