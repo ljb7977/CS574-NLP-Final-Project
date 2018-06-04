@@ -48,6 +48,15 @@ class Translator(object):
                 endIdx = len(self.trainData)
             indices = permutation[startIdx:endIdx]
             batch_trainData = [self.trainData[i] for i in indices]
+            for batch in batch_trainData:
+                self.optimizer.zero_grad()
+                train_src = torch.Tensor(batch.src)
+                train_tgt = torch.Tensor(batch.tgt)
+                train_action = torch.Tensor(batch.action)
+                print(train_src)
+                print(train_tgt)
+                print(train_action)
+
 
 
     def loadCorpus(self, src, tgt, act, data):
@@ -119,7 +128,6 @@ class Translator(object):
                               hiddenEncDim,
                               hiddenActDim,
                               scale,
-                              'SGD',
                               clipThreshold,
                               beamSize,
                               maxLen,
@@ -131,13 +139,12 @@ class Translator(object):
                               saveDirName)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
-        my_optimizer = optim.SGD(self.model.parameters(), lr=learningRate)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=learningRate)
         print("# of Training Data:\t" + str(len(self.trainData)))
         print("# of Development Data:\t" + str(len(self.devData)))
         print("Source voc size: " + str(len(self.sourceVoc.tokenList)))
         print("Target voc size: " + str(len(self.targetVoc.tokenList)))
         print("Action voc size: " + str(len(self.actionVoc.tokenList)))
-        print(self.sourceVoc.tokenIndex)
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
             status = self.train()

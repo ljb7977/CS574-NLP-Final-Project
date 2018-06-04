@@ -18,7 +18,6 @@ class NMT_RNNG(nn.Module):
                  hiddenDim,
                  hiddenActDim,
                  scale,
-                 opt,
                  clipThreshold,
                  beamSize,
                  maxLen,
@@ -40,7 +39,6 @@ class NMT_RNNG(nn.Module):
         self.hiddenDim = hiddenDim
         self.hiddenActDim = hiddenActDim
         self.scale = scale
-        self.opt = opt
         self.clipThreshold = clipThreshold
         self.beamSize = beamSize
         self.maxLen = maxLen
