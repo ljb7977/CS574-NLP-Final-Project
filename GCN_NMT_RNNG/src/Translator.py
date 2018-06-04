@@ -36,8 +36,19 @@ class Translator(object):
         self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, self.trainData)
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, self.devData)
 
-    def train(self, batch_trainData):
-        self.model.biEncode(batch_trainData)
+    def train(self):
+        permutation = list(range(0, len(self.trainData)))
+        random.shuffle(permutation)
+        batchNumber = int(math.ceil(len(self.trainData) / self.miniBatchSize))
+        for i in range(1, batchNumber + 1):
+            print('Progress: ' + str(i) + '/' + str(batchNumber) + ' mini batches')
+            startIdx = (i - 1) * self.miniBatchSize
+            endIdx = startIdx + self.miniBatchSize
+            if endIdx > len(self.trainData):
+                endIdx = len(self.trainData)
+            indices = permutation[startIdx:endIdx]
+            batch_trainData = [self.trainData[i] for i in indices]
+
 
     def loadCorpus(self, src, tgt, act, data):
         with open(src) as f:
@@ -96,7 +107,7 @@ class Translator(object):
              loadGradName,
              startIter,
              epochs):
-
+        self.miniBatchSize = miniBatchSize
         self.model = NMT_RNNG(self.sourceVoc,
                               self.targetVoc,
                               self.actionVoc,
@@ -112,7 +123,7 @@ class Translator(object):
                               clipThreshold,
                               beamSize,
                               maxLen,
-                              miniBatchSize,
+                              self.miniBatchSize,
                               threadNum,
                               learningRate,
                               False,
@@ -129,18 +140,8 @@ class Translator(object):
         print(self.sourceVoc.tokenIndex)
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
-            permutation = list(range(0, len(self.trainData)))
-            random.shuffle(permutation)
-            batchNumber = int(math.ceil(len(self.trainData)/miniBatchSize))
-            for i in range(1, batchNumber+1):
-                print('Progress: ' + str(i) + '/' + str(batchNumber) + ' mini batches')
-                startIdx = (i-1)*miniBatchSize
-                endIdx = startIdx + miniBatchSize
-                if endIdx > len(self.trainData):
-                    endIdx = len(self.trainData)
-                indices = permutation[startIdx:endIdx]
-                batch_trainData = [self.trainData[i] for i in indices]
-                status = self.train(batch_trainData)
+            status = self.train()
+
 
 
 
