@@ -30,13 +30,12 @@ class Translator(object):
         self.sourceVoc = Vocabulary(srcTrain, srcVocaThreshold, 'lang')
         self.targetVoc = Vocabulary(tgtTrain, tgtVocaThreshold, 'lang')
         self.actionVoc = Vocabulary(actTrain, None, 'action')
-
         self.trainData = []
         self.devData = []
         self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, self.trainData)
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, self.devData)
 
-    def train(self):
+    def train(self, train=True):
         permutation = list(range(0, len(self.trainData)))
         random.shuffle(permutation)
         batchNumber = int(math.ceil(len(self.trainData) / self.miniBatchSize))
@@ -53,9 +52,35 @@ class Translator(object):
                 train_src = torch.Tensor(batch.src)
                 train_tgt = torch.Tensor(batch.tgt)
                 train_action = torch.Tensor(batch.action)
-                print(train_src)
-                print(train_tgt)
-                print(train_action)
+
+
+                '''
+                NMTRNNG.cpp에서 이 단계에 쓰는 코드
+                int length = data->src.size()-1; // source words
+                int top = 0;
+                int j = 0;
+                int k = 0;
+                int phraseNum = data->tgt.size(); // mapping a phrase
+                int leftNum = -1;
+                int rightNum = -1;
+                int tgtRightNum = -1;
+                int tgtLeftNum = -1;
+                int actNum = -1;
+
+                arg.init(*this, data, train);
+                this->biEncode(data, arg, train); // encoder
+
+                // Out Buffer (=> Stack); k == 0
+                this->outBufInitAffine.forward(arg.encStateEnd, arg.outBufState[k]->h);
+                arg.outBufState[k]->c = this->zeros;
+
+                if (train) {
+                    arg.outBufState[k]->delc = this->zeros;
+                    arg.outBufState[k]->delh = this->zeros;
+                }
+                arg.headStack.push(k);
+                ++k;
+                '''
 
 
 
