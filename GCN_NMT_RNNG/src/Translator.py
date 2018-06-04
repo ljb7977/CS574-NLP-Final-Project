@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
+from torch import optim
 from Vocabulary import Vocabulary
 from Models import NMT_RNNG
 import re
+import random
+import math
 
 class Data(object):
     def __init__(self):
@@ -33,6 +35,9 @@ class Translator(object):
         self.devData = []
         self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, self.trainData)
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, self.devData)
+
+    def train(self, batch_trainData):
+        self.model.biEncode(batch_trainData)
 
     def loadCorpus(self, src, tgt, act, data):
         with open(src) as f:
@@ -73,23 +78,24 @@ class Translator(object):
                     idx += 1
         return data
 
-    def demo2(self,
-              inputDim,
-              inputActDim,
-              hiddenDim,
-              hiddenEncDim,
-              hiddenActDim,
-              scale,
-              clipThreshold,
-              beamSize,
-              maxLen,
-              miniBatchSize,
-              threadNum,
-              learningRate,
-              saveDirName,
-              loadModelName,
-              loadGradName,
-              startIter):
+    def demo(self,
+             inputDim,
+             inputActDim,
+             hiddenDim,
+             hiddenEncDim,
+             hiddenActDim,
+             scale,
+             clipThreshold,
+             beamSize,
+             maxLen,
+             miniBatchSize,
+             threadNum,
+             learningRate,
+             saveDirName,
+             loadModelName,
+             loadGradName,
+             startIter,
+             epochs):
 
         self.model = NMT_RNNG(self.sourceVoc,
                               self.targetVoc,
@@ -110,16 +116,35 @@ class Translator(object):
                               threadNum,
                               learningRate,
                               False,
-                              startIter,
+                              0,
                               saveDirName)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
-
+        my_optimizer = optim.SGD(self.model.parameters(), lr=learningRate)
         print("# of Training Data:\t" + str(len(self.trainData)))
         print("# of Development Data:\t" + str(len(self.devData)))
         print("Source voc size: " + str(len(self.sourceVoc.tokenList)))
         print("Target voc size: " + str(len(self.targetVoc.tokenList)))
         print("Action voc size: " + str(len(self.actionVoc.tokenList)))
+
+        # NMTRNNG::Grad  grad(nmtRNNG)
+
+        test = self.trainData[0]
+        for i in range(epochs):
+            print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
+            permutation = list(range(0, len(self.trainData)))
+            random.shuffle(permutation)
+            # bool status = nmtRNNG.trainOpenMP(grad);
+            batchNumber = int(math.ceil(len(self.trainData)/miniBatchSize))
+            for i in range(1, batchNumber+1):
+                print('Progress: ' + str(i) + '/' + str(batchNumber) + ' mini batches')
+                startIdx = (i-1)*miniBatchSize
+                endIdx = startIdx + miniBatchSize - 1
+                if endIdx >= len(self.trainData):
+                    endIdx = len(self.trainData) - 1
+                indices = permutation[startIdx:endIdx]
+                batch_trainData = [self.trainData[i] for i in indices]
+                status = self.train(batch_trainData)
 
 
 

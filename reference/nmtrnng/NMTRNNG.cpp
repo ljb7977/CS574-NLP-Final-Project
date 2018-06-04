@@ -2072,7 +2072,7 @@ void NMTRNNG::saveResult(const Real value,
   valueFile << value << std::endl;
 }
 
-// test 용
+// 1
 void NMTRNNG::demo(const std::string& srcTrain, 
 		   const std::string& tgtTrain, 
 		   const std::string& actTrain,
@@ -2170,7 +2170,7 @@ void NMTRNNG::demo(const std::string& srcTrain,
   }
 }
 
-// train 용
+// 2
 void NMTRNNG::demo(const std::string& srcTrain, 
 		   const std::string& tgtTrain, 
 		   const std::string& actTrain,
