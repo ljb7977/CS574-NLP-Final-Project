@@ -49,10 +49,12 @@ class Translator(object):
             batch_trainData = [self.trainData[i] for i in indices]
             for batch in batch_trainData:
                 self.optimizer.zero_grad()
-                train_src = torch.Tensor(batch.src)
-                train_tgt = torch.Tensor(batch.tgt)
-                train_action = torch.Tensor(batch.action)
-
+                train_src = torch.LongTensor(batch.src)
+                train_tgt = torch.LongTensor(batch.tgt)
+                train_action = torch.LongTensor(batch.action)
+                src_length = len(batch.src)
+                enc_hidden = self.model.enc_init_hidden()
+                output = self.model(train_src, train_tgt, train_action, src_length, enc_hidden)
 
                 '''
                 NMTRNNG.cpp에서 이 단계에 쓰는 코드
