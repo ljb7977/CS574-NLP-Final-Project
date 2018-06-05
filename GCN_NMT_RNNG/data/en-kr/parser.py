@@ -3,7 +3,7 @@ import os
 import re
 
 # make all.en and all.kr
-'''
+
 xml_cnt = 0     # 506197
 all_cnt = 0     # 506112
 
@@ -35,7 +35,7 @@ f_kr.close()
 
 print(xml_cnt)
 print(all_cnt)
-'''
+
 
 # make dev|train data
 import random
