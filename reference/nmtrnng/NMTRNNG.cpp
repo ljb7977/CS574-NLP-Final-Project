@@ -3,6 +3,7 @@
 #include "Optimizer.hpp"
 #include "Utils.hpp"
 #include "Affine.hpp"
+#include "N3LP/Matrix.hpp"
 #include <pthread.h>
 #include <sys/time.h>
 #include <omp.h>

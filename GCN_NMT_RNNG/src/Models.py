@@ -206,31 +206,27 @@ class NMT_RNNG(nn.Module):
             # word embedding & word embeddding
             head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]]))
             dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))
-            relation = torch.t(torch.index_select(self.actionEmbed, 1, [data.action[actNum]]))
-
-            self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
         elif rightNum > (self.tgtLen - 1) and leftNum < self.tgtLen:
             rightNum -= self.tgtLen
             head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]])) # parent: left
             dependent = self.embedVec[rightNum] # child: right
-            relation = torch.t(torch.index_select(self.actionEmbed, 1, [data.action[actNum]]))
-
-            self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
         elif rightNum < self.tgtLen and leftNum > (self.tgtLen - 1):
             leftNum -= self.tgtLen
-            self.compositionFunc(self.embedVec[phraseNum - self.tgtLen],
-                                 self.embedVec[leftNum],                     # parent: left
-                                 self.targetEmbed.col(data.tgt[rightNum]),  # child: right
-                                 self.actionEmbed.col(data.action[actNum]),
-                                 self.embedVecEnd[phraseNum - self.tgtLen])
+
+            head = self.embedVec[leftNum]  # parent: left
+            dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))  # child: right
         else:
             rightNum -= self.tgtLen
             leftNum -= self.tgtLen
-            self.compositionFunc(self.embedVec[phraseNum - self.tgtLen],
-                                 self.embedVec[leftNum],  # parent: left,
-                                 self.embedVec[rightNum],  # child: right
-                                 self.actionEmbed.col(data.action[actNum]),
-                                 self.embedVecEnd[phraseNum - self.tgtLen])
+
+            head = self.embedVect[leftNum]  # parent: left
+            dependent = self.embedVec[rightNum]  # child: right
+
+        relation = torch.t(torch.index_select(self.actionEmbed, 1, [data.action[actNum]]))
+
+        self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
+
+        self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #TODO LSTM forward
 
         # self.outBuf.forward(self.embedVec[phraseNum - self.tgtLen],
         #                      self.outBufState[top], self.outBufState[k]); #(xt, prev, cur)
@@ -255,45 +251,45 @@ class NMT_RNNG(nn.Module):
         self.stack.pop()
         return right, left
 
-    def decoderAttention(self, arg, decState, contextSeq, s_tilde, stildeEnd):
-        contextSeq = torch.zeros(self.hiddenEncDim * 2)
-        self.calculateAlpha(arg, decState)
-        for j in range(arg.srcLen):
-            contextSeq += arg.alphaSeqVec.coeff(j, 0) * arg.biEncState[j]
-
-        stildeEnd.segment(0, this.hiddenDim).noalias() = decState.h
-        stildeEnd.segment(self.hiddenDim, self.hiddenEncDim * 2).noalias() = contextSeq
-
-        self.stildeAffine.forward(stildeEnd, s_tilde)
-
-    def decoderAttention(self, arg, i, train):
-        arg.contextSeqList[i] = torch.zeros(self.hiddenEncDim * 2)
-
-        self.calculateAlpha(arg, arg.decState[i], i)
-
-        for j in range(arg.srcLen):
-            arg.contextSeqList[i] += arg.alphaSeq.coeff(j, i) * arg.biEncState[j]
-
-        arg.stildeEnd[i].segment(0, self.hiddenDim).noalias() = arg.decState[i].h
-        arg.stildeEnd[i].segment(self.hiddenDim, self.hiddenEncDim * 2) = arg.contextSeqList[i]
-
-        self.stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i]);
-
-    def calculateAlpha(self, arg, decState):
-        for i in range(arg.srcLen):
-            arg.alphaSeqVec.coeffRef(i, 0) = decState.h.dot(self.Wgeneral * arg.biEncState[i])
-
-        # softmax of ``alphaSeq``
-        arg.alphaSeqVec.array() -= arg.alphaSeqVec.maxCoeff() # stable softmax
-        arg.alphaSeqVec = arg.alphaSeqVec.array().exp() #exp() operation for all elements; np.exp(alphaSeq)
-        arg.alphaSeqVec /= arg.alphaSeqVec.array().sum() # alphaSeq.sum()
-
-    def calculateAlpha(self, arg, decState, colNum):
-        for i in range(srcLen):
-            arg.alphaSeq.coeffRef(i, colNum) = decState.h.dot(self.Wgeneral*arg.biEncState[i])
-        arg.alphaSeq.col(colNum).array() -= arg.alphaSeq.col(colNum).maxCoeff() #stable softmax
-        arg.alphaSeq.col(colNum) = arg.alphaSeq.col(colNum).array().exp() #exp()  operation for all elements; np.exp(alphaSeq)
-        arg.alphaSeq.col(colNum) /= arg.alphaSeq.col(colNum).array().sum(); #alphaSeq.sum()
+    # def decoderAttention(self, arg, decState, contextSeq, s_tilde, stildeEnd):
+    #     contextSeq = torch.zeros(self.hiddenEncDim * 2)
+    #     self.calculateAlpha(arg, decState)
+    #     for j in range(arg.srcLen):
+    #         contextSeq += arg.alphaSeqVec.coeff(j, 0) * arg.biEncState[j]
+    #
+    #     stildeEnd.segment(0, this.hiddenDim).noalias() = decState.h
+    #     stildeEnd.segment(self.hiddenDim, self.hiddenEncDim * 2).noalias() = contextSeq
+    #
+    #     self.stildeAffine.forward(stildeEnd, s_tilde)
+    #
+    # def decoderAttention(self, arg, i, train):
+    #     arg.contextSeqList[i] = torch.zeros(self.hiddenEncDim * 2)
+    #
+    #     self.calculateAlpha(arg, arg.decState[i], i)
+    #
+    #     for j in range(arg.srcLen):
+    #         arg.contextSeqList[i] += arg.alphaSeq.coeff(j, i) * arg.biEncState[j]
+    #
+    #     arg.stildeEnd[i].segment(0, self.hiddenDim).noalias() = arg.decState[i].h
+    #     arg.stildeEnd[i].segment(self.hiddenDim, self.hiddenEncDim * 2) = arg.contextSeqList[i]
+    #
+    #     self.stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i]);
+    #
+    # def calculateAlpha(self, arg, decState):
+    #     for i in range(arg.srcLen):
+    #         arg.alphaSeqVec.coeffRef(i, 0) = decState.h.dot(self.Wgeneral * arg.biEncState[i])
+    #
+    #     # softmax of ``alphaSeq``
+    #     arg.alphaSeqVec.array() -= arg.alphaSeqVec.maxCoeff() # stable softmax
+    #     arg.alphaSeqVec = arg.alphaSeqVec.array().exp() #exp() operation for all elements; np.exp(alphaSeq)
+    #     arg.alphaSeqVec /= arg.alphaSeqVec.array().sum() # alphaSeq.sum()
+    #
+    # def calculateAlpha(self, arg, decState, colNum):
+    #     for i in range(srcLen):
+    #         arg.alphaSeq.coeffRef(i, colNum) = decState.h.dot(self.Wgeneral*arg.biEncState[i])
+    #     arg.alphaSeq.col(colNum).array() -= arg.alphaSeq.col(colNum).maxCoeff() #stable softmax
+    #     arg.alphaSeq.col(colNum) = arg.alphaSeq.col(colNum).array().exp() #exp()  operation for all elements; np.exp(alphaSeq)
+    #     arg.alphaSeq.col(colNum) /= arg.alphaSeq.col(colNum).array().sum(); #alphaSeq.sum()
 
     def calcLoss(self, data, train):
         loss = 0.0
