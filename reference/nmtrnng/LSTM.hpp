@@ -2,6 +2,8 @@
 
 #include "Matrix.hpp"
 #include "Rand.hpp"
+#include "N3LP/Matrix.hpp"
+#include "N3LP/Rand.hpp"
 #include <fstream>
 
 class LSTM{

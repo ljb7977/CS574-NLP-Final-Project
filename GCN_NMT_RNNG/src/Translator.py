@@ -8,12 +8,13 @@ import re
 import random
 import math
 
+
 class Data(object):
     def __init__(self):
         self.src = []
         self.tgt = []
         self.action = []
-        self.trans = []
+        self.trans = [] # output of decoder
 
 
 class Translator(object):
@@ -49,9 +50,14 @@ class Translator(object):
             batch_trainData = [self.trainData[i] for i in indices]
             for batch in batch_trainData:
                 self.optimizer.zero_grad()
-
-                data = Data(torch.Tensor(batch.src), torch.Tensor(batch.tgt),
-                            torch.Tensor(batch.action))
+                # data = Data(torch.LongTensor(batch.src), torch.LongTensor(batch.tgt),
+                #             torch.LongTensor(batch.action))
+                train_src = torch.LongTensor(batch.src)
+                train_tgt = torch.LongTensor(batch.tgt)
+                train_action = torch.LongTensor(batch.action)
+                src_length = len(batch.src)
+                enc_hidden = self.model.enc_init_hidden()
+                output = self.model(train_src, train_tgt, train_action, src_length, enc_hidden)
 
                 '''
                 NMTRNNG.cpp에서 이 단계에 쓰는 코드
@@ -172,44 +178,4 @@ class Translator(object):
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
             status = self.train()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

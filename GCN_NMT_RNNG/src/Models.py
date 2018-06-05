@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 import utils, copy
-
+from torch.autograd import Variable
 
 class NMT_RNNG(nn.Module):
     def __init__(self,
@@ -64,21 +64,23 @@ class NMT_RNNG(nn.Module):
         # 여기서 모델 정의 파파팟
 
         # encoder
+        self.srcEmbedding = nn.Embedding(len(self.sourceVoc.tokenList), self.inputDim)
         self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.enc, self.scale)
+        utils.set_forget_bias(self.enc, 1.0)
+
         # decoder
         self.dec = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.dec, self.scale)
+        utils.set_forget_bias(self.enc, 1.0)
+
         # action
         self.act = nn.LSTM(input_size=self.inputActDim, hidden_size=self.hiddenActDim)
         utils.lstm_init_uniform_weights(self.act, self.scale)
+        utils.set_forget_bias(self.act, 1.0)
         # out buffer
         self.outBuf = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenDim)
         utils.lstm_init_uniform_weights(self.outBuf, self.scale)
-
-        utils.set_forget_bias(self.enc, 1.0)
-        utils.set_forget_bias(self.dec, 1.0)
-        utils.set_forget_bias(self.act, 1.0)
         utils.set_forget_bias(self.outBuf, 1.0)
 
         # affine
@@ -98,8 +100,6 @@ class NMT_RNNG(nn.Module):
         utils.linear_init(self.embedVecAffine, self.scale)
 
         # embedding matrices는 보통 inputDim*len(Voc)형태로 만들어져야하는데, 일단 보류
-        self.sourceEmbed = torch.Tensor(self.inputDim, len(self.sourceVoc.tokenList))
-        init.uniform_(self.sourceEmbed, 0., self.scale)
         self.targetEmbed = torch.Tensor(self.inputDim, len(self.targetVoc.tokenList))
         init.uniform_(self.targetEmbed, 0., self.scale)
         self.actionEmbed = torch.Tensor(self.inputActDim, len(self.actionVoc.tokenList))
@@ -121,6 +121,26 @@ class NMT_RNNG(nn.Module):
         if train:
             self.actState[i].delc = torch.zeros(self.hiddenActDim)
             self.actState[i].delh = torch.zeros(self.hiddenActDim)
+
+    def enc_init_hidden(self):
+        weight = next(self.parameters()).data
+        return (Variable(weight.new(2, 1, self.hiddenEncDim).zero_()),
+                Variable(weight.new(2, 1, self.hiddenEncDim).zero_()))
+
+    def forward(self, src, tgt, action, src_length, enc_hidden, train=True):
+        output, (last_state, last_cell) = self.encode(src, src_length, enc_hidden)
+        self.decode(output, (last_state, last_cell), tgt, action)
+        return
+
+    def encode(self, src, src_length, enc_hidden):
+        src = src.view(-1, 1)
+        # (src_length, 1, inputDim)
+        src_embed = self.srcEmbedding(src)
+        output, (last_state, last_cell) = self.enc(src_embed, enc_hidden)
+        return output, (last_state, last_cell)
+
+    def decode(self, output, enc_hidden_last, tgt, action):
+
         return
 
     def compositionFunc(self, phraseNum, head, dependent, relation):
