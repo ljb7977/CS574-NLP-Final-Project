@@ -465,7 +465,7 @@ class TestDiscRNNG(object):
         pos_tags = self.make_pos_tags()
         parser = self.make_parser()
 
-        best_action_ids, parse_tree = parser.decode(words, pos_tags)
+        best_action_ids, parse_tree = parser.decoder(words, pos_tags)
 
         assert isinstance(best_action_ids, list)
         assert isinstance(parse_tree, Tree)

@@ -201,7 +201,7 @@ class Trainer(object):
         llh = self.model(words, pos_tags, actions)
         training = self.model.training
         self.model.eval()
-        _, hyp_tree = self.model.decode(words, pos_tags)
+        _, hyp_tree = self.model.decoder(words, pos_tags)
         self.model.train(training)
         hyp_tree = id2parsetree(
             hyp_tree, self.NONTERMS.vocab.itos, self.WORDS.vocab.itos)

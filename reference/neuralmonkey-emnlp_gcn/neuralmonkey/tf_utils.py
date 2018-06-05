@@ -45,7 +45,7 @@ def gpu_memusage() -> str:
     smi_output = check_output(
         r'nvidia-smi --query-gpu={query_cols} --format=csv,noheader,nounits'
         .format(query_cols=','.join(gpu_query_columns)),
-        shell=True).decode().strip()
+        shell=True).decoder().strip()
 
     for line in smi_output.split('\n'):
         if not line:

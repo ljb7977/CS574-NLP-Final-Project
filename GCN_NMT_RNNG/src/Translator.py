@@ -59,6 +59,10 @@ class Translator(object):
                 enc_hidden = self.model.enc_init_hidden()
                 output = self.model(train_src, train_tgt, train_action, src_length, enc_hidden)
 
+            # batch 단위로 prediction이랑 gold label각각 criterion에 넣어야함
+            # loss = criterion()
+            # loss.backward()
+
                 '''
                 NMTRNNG.cpp에서 이 단계에 쓰는 코드
                 int length = data->src.size()-1; // source words

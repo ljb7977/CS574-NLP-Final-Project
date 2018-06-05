@@ -1,7 +1,7 @@
 #include "LSTM.hpp"
-#include "ActFunc.hpp"
-#include "Utils.hpp"
-#include "Optimizer.hpp"
+#include "N3LP/Utils.hpp"
+#include "N3LP/Optimizer.hpp"
+#include "N3LP/ActFunc.hpp"
 
 LSTM::LSTM(const int inputDim, const int hiddenDim):
   dropoutRateX(-1.0), dropoutRateA(-1.0), dropoutRateH(-1.0)
@@ -124,6 +124,7 @@ void LSTM::forward(const VecD& xt, const LSTM::State* prev, LSTM::State* cur){
   
   this->activate(prev, cur);
 }
+
 void LSTM::forward(const VecD& xt, LSTM::State* cur){
   cur->i = this->bi;
   cur->o = this->bo;

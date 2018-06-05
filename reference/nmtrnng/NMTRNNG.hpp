@@ -7,6 +7,7 @@
 #include "Vocabulary.hpp"
 #include "SoftMax.hpp"
 #include "BlackOut.hpp"
+#include "N3LP/Affine.hpp"
 
 class NMTRNNG{
 public:

@@ -1,3 +1,4 @@
+#include <cassert>
 #include "Affine.hpp"
 #include "Optimizer.hpp"
 #include "Utils.hpp"
