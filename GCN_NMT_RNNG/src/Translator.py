@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 from Vocabulary import Vocabulary
-from Models import NMT_RNNG
+from Models import NMT_RNNG, Data
 import re
 import random
 import math
@@ -49,10 +49,9 @@ class Translator(object):
             batch_trainData = [self.trainData[i] for i in indices]
             for batch in batch_trainData:
                 self.optimizer.zero_grad()
-                train_src = torch.Tensor(batch.src)
-                train_tgt = torch.Tensor(batch.tgt)
-                train_action = torch.Tensor(batch.action)
 
+                data = Data(torch.Tensor(batch.src), torch.Tensor(batch.tgt),
+                            torch.Tensor(batch.action))
 
                 '''
                 NMTRNNG.cpp에서 이 단계에 쓰는 코드

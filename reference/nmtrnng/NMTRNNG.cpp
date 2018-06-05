@@ -336,7 +336,7 @@ void NMTRNNG::decoderBackward2(const NMTRNNG::Data* data,
   }
 }
 
-void NMTRNNG::decoderAction(NMTRNNG::ThreadArg& arg, 
+void NMTRNNG::decoderAction(NMTRNNG::ThreadArg& arg, //call forward for action LSTM?
 			    std::vector<LSTM::State*>& actState,
 			    const int actNum, 
 			    const int i, 
@@ -531,7 +531,7 @@ void NMTRNNG::decoderAttention(NMTRNNG::ThreadArg& arg,
     arg.contextSeqList[i].noalias() += arg.alphaSeq.coeff(j, i) * arg.biEncState[j];
   }
   arg.stildeEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[i]->h;
-  arg.stildeEnd[i].segment(this->hiddenDim, this->hiddenEncDim*2).noalias() = arg.contextSeqList[i];
+  arg.stildeEnd[i].seegment(this->hiddenDim, this->hiddenEncDim*2).noalias() = arg.contextSeqList[i];
 
   this->stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i]);
 }
@@ -1616,7 +1616,7 @@ std::tuple<Real, Real> NMTRNNG::calcLoss(NMTRNNG::Data* data,
   ++k;
 
   for (int i = 0; i < arg.actLen; ++i, ++k) {
-    // SoftmaxAct calculation
+    // SoftmaxAct calculationa
     actNum = data->action[i];
 
     this->decoderAction(arg, arg.actState, data->action[i-1], i, false); // PUSH
@@ -1631,18 +1631,18 @@ std::tuple<Real, Real> NMTRNNG::calcLoss(NMTRNNG::Data* data,
 	this->softmax.calcDist(arg.s_tilde[j], arg.targetDist);
 	loss += this->softmax.calcLoss(arg.targetDist, data->tgt[j]);
       } else {
-	if (train) {
-	  // word prediction
-	  arg.blackOutState[0].sample[0] = data->tgt[j];
-	  arg.blackOutState[0].weight.col(0) = this->blackOut.weight.col(data->tgt[j]);
-	  arg.blackOutState[0].bias.coeffRef(0, 0) = this->blackOut.bias.coeff(data->tgt[j], 0);
+        if (train) {
+          // word prediction
+          arg.blackOutState[0].sample[0] = data->tgt[j];
+          arg.blackOutState[0].weight.col(0) = this->blackOut.weight.col(data->tgt[j]);
+          arg.blackOutState[0].bias.coeffRef(0, 0) = this->blackOut.bias.coeff(data->tgt[j], 0);
 
-	  this->blackOut.calcSampledDist2(arg.s_tilde[j], arg.targetDist, arg.blackOutState[0]);
-	  loss += this->blackOut.calcSampledLoss(arg.targetDist); // Softmax
-	} else { // Test Time
-	  this->blackOut.calcDist(arg.s_tilde[j], arg.targetDist); // Softmax
-	  loss += this->blackOut.calcLoss(arg.targetDist, data->tgt[j]); // Softmax
-	}
+          this->blackOut.calcSampledDist2(arg.s_tilde[j], arg.targetDist, arg.blackOutState[0]);
+          loss += this->blackOut.calcSampledLoss(arg.targetDist); // Softmax
+        } else { // Test Time
+          this->blackOut.calcDist(arg.s_tilde[j], arg.targetDist); // Softmax
+          loss += this->blackOut.calcLoss(arg.targetDist, data->tgt[j]); // Softmax
+        }
       }
       // 2) Let the output buffer proceed one step, though the computed unit is not used at this step; PUSH
       this->outBuf.forward(this->targetEmbed.col(data->tgt[j]), 

@@ -216,6 +216,7 @@ void LSTM::backward(LSTM::State* cur, LSTM::Grad& grad, const VecD& xt){
   if (this->dropoutRateX > 0.0){
     VecD masked = xt.array()*cur->maskXt.array();
     grad.Wxi.noalias() += deli*masked.transpose();
+
     grad.Wxo.noalias() += delo*masked.transpose();
     grad.Wxu.noalias() += delu*masked.transpose();
     cur->delx.array() *= cur->maskXt.array();
