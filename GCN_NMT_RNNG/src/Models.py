@@ -95,6 +95,8 @@ class NMT_RNNG(nn.Module):
         utils.linear_init(self.utAffine, self.scale)
         self.stildeAffine = nn.Linear(self.hiddenDim + self.hiddenActDim * 2, self.hiddenDim)
         utils.linear_init(self.stildeAffine, self.scale)
+        #stilde Affine: attention
+
         self.embedVecAffine = nn.Linear(self.inputDim * 2 + self.inputActDim, self.inputDim)
         utils.linear_init(self.embedVecAffine, self.scale)
 
@@ -121,6 +123,8 @@ class NMT_RNNG(nn.Module):
                 Variable(weight.new(2, 1, self.hiddenEncDim).zero_()))
 
     def forward(self, src, tgt, actions, src_length, enc_hidden, train=True):
+        utEnds = []
+
         output, (enc_last_state, last_cell) = self.encode(src, src_length, enc_hidden)
         # 이 디코더의 output을 action sLSTM과 decoder LSTM에 넣어야 한다.
         j, k, top = 0, 0, 0
@@ -128,18 +132,34 @@ class NMT_RNNG(nn.Module):
         k += 1
         length = len(src)
         phraseNum = len(tgt)
-        for i in range(len(actions)):
-            actNum = actions[i]
-            if i == 0:
-                action_decoded = self.decoderAction(enc_last_state, 0, train=train) # 일단 0일때는 action 0으로 설정
-            else:
-                action_decoded = self.decoderAction(enc_last_state, actions[i-1], train=train)
 
-            if self.actionVoc.tokenList[actNum][2] == 0: #shift action
+        # i == 0
+
+        act_h1, act_c1 = self.decoderAction(enc_last_state, 0, train=train)
+        # 일단 0일때는 action 0으로 설정
+        #처음 액션은 무조건 shift이므로, 그것만 처리한다.
+
+        self.headStack.append(k)
+        dec_h1, dec_c1 = self.decoder(enc_last_state)
+        s_tilde = self.decoderAttention(dec_h1)
+        out_h1, out_c1 = self.outBuf(tgt[j]) #0번째 target word embedding 넣음
+        self.embedStack.append(j)
+
+        utEnd = torch.cat((dec_h1, out_h1, act_h1))
+        ut = F.tanh(self.utAffine(utEnd))
+
+        j+=1
+        k+=1
+
+        for i in range(1, len(actions)):
+            actNum = actions[i]
+            action_decoded = self.decoderAction(enc_last_state, actions[i-1], train=train)
+
+            if self.getAction(actNum) == 0: #shift action
                 self.headStack.append(k) #push to headStack
 
-                decoded = self.decoder(enc_last_state) #decoder forward 1 step
-                self.decoderAttention()
+                dec_h1, dec_c1 = self.decoder(enc_last_state) #decoder forward 1 step
+                s_tilde = self.decoderAttention()
                 self.outBuf(self.col(self.targetEmbed, tgt[j]))
                 self.embedStack.append(j)
 
@@ -147,11 +167,11 @@ class NMT_RNNG(nn.Module):
                 # arg.utEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[j]->h;
 
                 j+=1
-            elif self.actionVoc.tokenList[actNum][2] == 1: # Reduce left
+            elif self.getAction(actNum) == 1: # Reduce left
                 self.decoderReduceLeft(phraseNum, i-1, k, True)
                 phraseNum+=1
                 self.utEnd[i][:self.hiddenDim] #= arg.decState[j - 1]->h;
-            elif self.actionVoc.tokenList[actNum][2] == 2: #reduce right
+            elif self.getAction(actNum) == 2: #reduce right
                 self.decoderReduceRight(phraseNum, i-1, k, True)
                 phraseNum+=1
                 self.utEnd[i][:self.hiddenDim]  # = arg.decState[j - 1]->h;
@@ -166,6 +186,9 @@ class NMT_RNNG(nn.Module):
             # self.ut.forward()
         return
 
+    def getAction(self, actNum):
+        return self.actionVoc.tokenList[actNum][2]
+
     def col(self, tensor, i):
         return torch.t(torch.index_select(tensor, 1, [i]))
 
@@ -176,9 +199,11 @@ class NMT_RNNG(nn.Module):
         output, (last_state, last_cell) = self.enc(src_embed, enc_hidden)
         return output, (last_state, last_cell)
 
-    def decoder(self, input, dec_hidden):
-        output, (last_state, last_cell) = self.dec(input, dec_hidden)
-        return output, (last_state, last_cell)
+    def decoder(self, input, dec_hidden, dec_c0):
+        lstm = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
+        #TODO initialize this LSTMcell
+        h1, c1 = lstm(input, (dec_hidden, dec_c0)) # self.dec(input, dec_hidden)
+        return h1, c1
 
     def decoderAction(self, enc_last_state, action, train): # call forward for action LSTM
         result = self.act(enc_last_state, action) #TODO fix forward of act
@@ -190,21 +215,15 @@ class NMT_RNNG(nn.Module):
             # self.actState[i].delh = torch.zeros(self.hiddenActDim)
         return result
 
-    def decoderAttention(self, i):
-        self.contextSeqList[i] = torch.zeros(self.hiddenEncDim * 2)
-        self.calculateAlpha()
-        # arg.contextSeqList[i] = this->zeros2
-        #
-        # this->calculateAlpha(arg, arg.decState[i], i)
-        #
-        # for (int j = 0; j < arg.srcLen; ++j) {
-        #     arg.contextSeqList[i].noalias() += arg.alphaSeq.coeff(j, i) * arg.biEncState[j]
-        # }
-        # arg.stildeEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[i]->h
-        # arg.stildeEnd[i].seegment(this->hiddenDim, this->hiddenEncDim * 2).noalias() = arg.contextSeqList[i]
-        #
-        # this->stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i])
+    def calcContextVec(self):
+        contextVec = 0
 
+        return contextVec
+
+    def decoderAttention(self, dec_hidden):
+        context_vec = self.calcContextVec()
+        torch.cat((dec_hidden, context_vec))
+        return F.tanh(self.stildeAffine(dec_hidden)) # s_tilde
 
     def compositionFunc(self, phraseNum, head, dependent, relation):
         embedVecEnd = torch.cat((head, dependent, relation), 1)
