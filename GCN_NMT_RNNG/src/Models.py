@@ -50,14 +50,14 @@ class NMT_RNNG(nn.Module):
         self.saveDirName = saveDirName
 
         # TODO init
-        self.stack = []
+        self.stack = Stack()
         self.headList = []
         self.embedList = []
         self.actState = []
 
-        self.headStack = []
+        self.headStack = Stack()
         self.headList = []
-        self.embedStack = []
+        self.embedStack = Stack()
         self.embedList = []
 
         # 여기서 모델 정의 파파팟
@@ -129,7 +129,7 @@ class NMT_RNNG(nn.Module):
         output, (enc_last_state, last_cell) = self.encode(src, src_length, enc_hidden)
         # 이 디코더의 output을 action sLSTM과 decoder LSTM에 넣어야 한다.
         j, k, top = 0, 0, 0
-        self.headStack.append(k)
+        self.headStack.push(k)
         k += 1
         length = len(src)
         phraseNum = len(tgt)
@@ -139,11 +139,11 @@ class NMT_RNNG(nn.Module):
         act_h1, act_c1 = self.decoderAction(enc_last_state)
         # 일단 0일때는 action 0으로 설정
         #처음 액션은 무조건 shift이므로, 그것만 처리한다.
-        self.headStack.append(k)
+        self.headStack.push(k)
         dec_h1, dec_c1 = self.decoder(enc_last_state)
         s_tilde = self.decoderAttention(dec_h1)
         out_h1, out_c1 = self.outBuf(tgt[j]) #0번째 target word embedding 넣음
-        self.embedStack.append(j)
+        self.embedStack.push(j)
 
         utEnd = torch.cat((dec_h1, out_h1, act_h1))
         utEnds.append(utEnd)
@@ -158,12 +158,12 @@ class NMT_RNNG(nn.Module):
             act_h1, act_c1 = self.decoderAction(actions[i-1], act_h1, act_c1) #put prev action
 
             if self.getAction(actNum) == 0: #shift action
-                self.headStack.append(k) #push to headStack
+                self.headStack.push(k) #push to headStack
 
                 dec_h1, dec_c1 = self.decoder(s_tilde, (dec_h1, dec_c1)) #TODO decoder forward 1 step with stilde
                 s_tilde = self.decoderAttention(dec_h1)
                 self.outBuf.push(self.col(self.targetEmbed, tgt[j]), (out_h1, out_c1)) #outbut forward
-                self.embedStack.append(j)
+                self.embedStack.push(j)
                 j+=1
             elif self.getAction(actNum) == 1: # Reduce left
                 self.decoderReduceLeft(phraseNum, i-1, k, True, actions)
@@ -224,8 +224,8 @@ class NMT_RNNG(nn.Module):
         return F.tanh(embed)
 
     def decoderReduceLeft(self, tgt, phraseNum, actNum, k, train, actions):
-        top = self.reduceHeadStack(k)
-        rightNum, leftNum = self.reduceStack()
+        top = self.headStack.reduceHead(k)
+        rightNum, leftNum = self.headStack.reduce()
 
         if train:
             self.headList.append(top)
@@ -276,12 +276,12 @@ class NMT_RNNG(nn.Module):
         #TODO fix above line
 
         self.outBuf(self.embedVec[phraseNum - self.tgtLen])
-        self.embedStack.append(phraseNum)
+        self.embedStack.push(phraseNum)
         return
 
     def decoderReduceRight(self, tgt, phraseNum, actNum, k, train, actions):
-        top = self.reduceHeadStack(k)
-        rightNum, leftNum = self.reduceStack()
+        top = self.headStack.reduceHead(k)
+        rightNum, leftNum = self.headStack.reduce()
 
         if train:
             self.headList.append(top)
@@ -310,22 +310,8 @@ class NMT_RNNG(nn.Module):
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
         # TODO fix above line
         self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #sLSTM push (forward)
-        self.embedStack.append(phraseNum)
+        self.embedStack.push(phraseNum)
         return
-
-    def reduceHeadStack(self, k):
-        self.stack.pop()
-        self.stack.pop()
-        top = self.stack.pop()
-        self.stack.append(k)
-        return top
-
-    def reduceStack(self):
-        right = self.stack.pop()
-        self.stack.pop()
-        left = self.stack.pop()
-        self.stack.pop()
-        return right, left
 
     def calcLoss(self, data, train):
         loss = 0.0
@@ -409,6 +395,25 @@ class NMT_RNNG(nn.Module):
 
         arg.clear()
         return [loss, lossAct]
+
+class Stack():
+    def __init__(self):
+        self.stack = []
+
+    def reduce(self):
+        right = self.stack.pop()
+        left = self.stack.pop()
+        return right, left
+
+    def reduceHead(self, k):
+        self.stack.pop()
+        self.stack.pop()
+        top = self.stack[-1]
+        self.stack.append(k)
+        return top
+
+    def push(self, item):
+        self.stack.append(item)
 
 class StackLSTM(nn.Module):
     class EmptyStackError(Exception):
