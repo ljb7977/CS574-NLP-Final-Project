@@ -124,6 +124,7 @@ class NMT_RNNG(nn.Module):
 
     def forward(self, src, tgt, actions, src_length, enc_hidden, train=True):
         utEnds = []
+        uts = []
 
         output, (enc_last_state, last_cell) = self.encode(src, src_length, enc_hidden)
         # 이 디코더의 output을 action sLSTM과 decoder LSTM에 넣어야 한다.
@@ -135,10 +136,9 @@ class NMT_RNNG(nn.Module):
 
         # i == 0
 
-        act_h1, act_c1 = self.decoderAction(enc_last_state, 0, train=train)
+        act_h1, act_c1 = self.decoderAction(enc_last_state)
         # 일단 0일때는 action 0으로 설정
         #처음 액션은 무조건 shift이므로, 그것만 처리한다.
-
         self.headStack.append(k)
         dec_h1, dec_c1 = self.decoder(enc_last_state)
         s_tilde = self.decoderAttention(dec_h1)
@@ -146,45 +146,42 @@ class NMT_RNNG(nn.Module):
         self.embedStack.append(j)
 
         utEnd = torch.cat((dec_h1, out_h1, act_h1))
+        utEnds.append(utEnd)
         ut = F.tanh(self.utAffine(utEnd))
+        uts.append(ut)
 
         j+=1
         k+=1
 
         for i in range(1, len(actions)):
             actNum = actions[i]
-            action_decoded = self.decoderAction(enc_last_state, actions[i-1], train=train)
+            act_h1, act_c1 = self.decoderAction(actions[i-1], act_h1, act_c1) #put prev action
 
             if self.getAction(actNum) == 0: #shift action
                 self.headStack.append(k) #push to headStack
 
-                dec_h1, dec_c1 = self.decoder(enc_last_state) #decoder forward 1 step
-                s_tilde = self.decoderAttention()
-                self.outBuf(self.col(self.targetEmbed, tgt[j]))
+                dec_h1, dec_c1 = self.decoder(s_tilde, (dec_h1, dec_c1)) #TODO decoder forward 1 step with stilde
+                s_tilde = self.decoderAttention(dec_h1)
+                self.outBuf.push(self.col(self.targetEmbed, tgt[j]), (out_h1, out_c1)) #outbut forward
                 self.embedStack.append(j)
-
-                self.utEnd[i][:self.hiddenDim] # =arg.decState[j]->h;
-                # arg.utEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[j]->h;
-
                 j+=1
             elif self.getAction(actNum) == 1: # Reduce left
-                self.decoderReduceLeft(phraseNum, i-1, k, True)
+                self.decoderReduceLeft(phraseNum, i-1, k, True, actions)
                 phraseNum+=1
-                self.utEnd[i][:self.hiddenDim] #= arg.decState[j - 1]->h;
             elif self.getAction(actNum) == 2: #reduce right
-                self.decoderReduceRight(phraseNum, i-1, k, True)
+                self.decoderReduceRight(phraseNum, i-1, k, True, actions)
                 phraseNum+=1
-                self.utEnd[i][:self.hiddenDim]  # = arg.decState[j - 1]->h;
             else:
                 raise("Action Error: undefined Action")
 
-            self.utEnd[i][self.hiddenDim:self.hiddenDim*2] = self.outBufState[k-1].h
-            self.utEnd[i][self.hiddenDim*2:self.hiddenDim*2+self.hiddenActDim] = self.actState[i].h
-            # TODO Tensor concat
+            utEnd = torch.cat((dec_h1, out_h1, act_h1))
+            utEnds.append(utEnd)
+            ut = F.tanh(self.utAffine(utEnd))
+            uts.append(ut)
 
             k+=1
             # self.ut.forward()
-        return
+        return #act, dec, out h1 and c1, s_tilde
 
     def getAction(self, actNum):
         return self.actionVoc.tokenList[actNum][2]
@@ -205,18 +202,12 @@ class NMT_RNNG(nn.Module):
         h1, c1 = lstm(input, (dec_hidden, dec_c0)) # self.dec(input, dec_hidden)
         return h1, c1
 
-    def decoderAction(self, enc_last_state, action, train): # call forward for action LSTM
-        result = self.act(enc_last_state, action) #TODO fix forward of act
-        if train:
-            pass
-            # reset act's del?
-            # self.act.reset_parameters()
-            # self.actState[i].delc = torch.zeros(self.hiddenActDim)
-            # self.actState[i].delh = torch.zeros(self.hiddenActDim)
-        return result
+    def decoderAction(self, action, h0, c0): # call forward for action LSTM
+        h1, c1 = self.act(action, (h0, c0))
+        return h1, c1
 
     def calcContextVec(self):
-        contextVec = 0
+        contextVec = 0  #TODO create context vector
 
         return contextVec
 
@@ -232,7 +223,7 @@ class NMT_RNNG(nn.Module):
 
         return F.tanh(embed)
 
-    def decoderReduceLeft(self, tgt, phraseNum, actNum, k, train):
+    def decoderReduceLeft(self, tgt, phraseNum, actNum, k, train, actions):
         top = self.reduceHeadStack(k)
         rightNum, leftNum = self.reduceStack()
 
@@ -241,7 +232,7 @@ class NMT_RNNG(nn.Module):
             self.embedList.append(leftNum)
             self.embedList.append(rightNum)
 
-        if rightNum < self.tgtLen and leftNum < self.tgtLen: # word embedding & word embeddding
+        if rightNum < self.tgtLen and leftNum < self.tgtLen: # word embedding
             # head = self.targetEmbed.col(data.tgt[rightNum])
             # dependent = self.targetEmbed.col(data.tgt[leftNum])
             # relation = self.self.actionEmbed.col(data.action[actNum])
@@ -280,20 +271,15 @@ class NMT_RNNG(nn.Module):
             #                      self.actionEmbed.col(data.action[actNum]),
             #                      arg.embedVecEnd[phraseNum - arg.tgtLen])
 
-        relation = self.col(self.actionEmbed, action[actNum])
+        relation = self.col(self.actionEmbed, actions[actNum])
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
+        #TODO fix above line
 
-        self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #TODO LSTM forward
-
-        # self.outBuf.forward(arg.embedVec[phraseNum - arg.tgtLen],
-        #                      arg.outBufState[top], arg.outBufState[k]); #(xt, prev, cur)
-        # TODO: not needed?
-        if train:
-            self.outBufState[k].delc = copy.deepcopy(self.zeros)
-            self.outBufState[k].delh = copy.deepcopy(self.zeros)
+        self.outBuf(self.embedVec[phraseNum - self.tgtLen])
         self.embedStack.append(phraseNum)
+        return
 
-    def decoderReduceRight(self, data, phraseNum, actNum, k, train):
+    def decoderReduceRight(self, tgt, phraseNum, actNum, k, train, actions):
         top = self.reduceHeadStack(k)
         rightNum, leftNum = self.reduceStack()
 
@@ -302,19 +288,17 @@ class NMT_RNNG(nn.Module):
             self.embedList.append(leftNum)
             self.embedList.append(rightNum)
 
-        if rightNum < self.tgtLen and leftNum < self.tgtLen:
-            # word embedding & word embeddding
-            head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]]))
-            dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))
+        if rightNum < self.tgtLen and leftNum < self.tgtLen: # word embedding
+            head = self.col(self.targetEmbed, tgt[leftNum])
+            dependent = self.col(self.targetEmbed, tgt[rightNum])
         elif rightNum > (self.tgtLen - 1) and leftNum < self.tgtLen:
             rightNum -= self.tgtLen
-            head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]])) # parent: left
+            head = self.col(self.targetEmbed, tgt[leftNum]) # parent: left
             dependent = self.embedVec[rightNum] # child: right
         elif rightNum < self.tgtLen and leftNum > (self.tgtLen - 1):
             leftNum -= self.tgtLen
-
             head = self.embedVec[leftNum]  # parent: left
-            dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))  # child: right
+            dependent = self.col(self.targetEmbed, tgt[rightNum])  # child: right
         else:
             rightNum -= self.tgtLen
             leftNum -= self.tgtLen
@@ -322,18 +306,10 @@ class NMT_RNNG(nn.Module):
             head = self.embedVect[leftNum]  # parent: left
             dependent = self.embedVec[rightNum]  # child: right
 
-        relation = torch.t(torch.index_select(self.actionEmbed, 1, [data.action[actNum]]))
-
+        relation = self.col(self.actionEmbed, actions[actNum])
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
-
-        self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #TODO LSTM forward
-
-        # self.outBuf.forward(self.embedVec[phraseNum - self.tgtLen],
-        #                      self.outBufState[top], self.outBufState[k]); #(xt, prev, cur)
-        # TODO: not needed?
-        if train:
-            self.outBufState[k].delc = copy.deepcopy(self.zeros)
-            self.outBufState[k].delh = copy.deepcopy(self.zeros)
+        # TODO fix above line
+        self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #sLSTM push (forward)
         self.embedStack.append(phraseNum)
         return
 
@@ -350,46 +326,6 @@ class NMT_RNNG(nn.Module):
         left = self.stack.pop()
         self.stack.pop()
         return right, left
-
-    # def decoderAttention(self, arg, decState, contextSeq, s_tilde, stildeEnd):
-    #     contextSeq = torch.zeros(self.hiddenEncDim * 2)
-    #     self.calculateAlpha(arg, decState)
-    #     for j in range(arg.srcLen):
-    #         contextSeq += arg.alphaSeqVec.coeff(j, 0) * arg.biEncState[j]
-    #
-    #     stildeEnd.segment(0, this.hiddenDim).noalias() = decState.h
-    #     stildeEnd.segment(self.hiddenDim, self.hiddenEncDim * 2).noalias() = contextSeq
-    #
-    #     self.stildeAffine.forward(stildeEnd, s_tilde)
-    #
-    # def decoderAttention(self, arg, i, train):
-    #     arg.contextSeqList[i] = torch.zeros(self.hiddenEncDim * 2)
-    #
-    #     self.calculateAlpha(arg, arg.decState[i], i)
-    #
-    #     for j in range(arg.srcLen):
-    #         arg.contextSeqList[i] += arg.alphaSeq.coeff(j, i) * arg.biEncState[j]
-    #
-    #     arg.stildeEnd[i].segment(0, self.hiddenDim).noalias() = arg.decState[i].h
-    #     arg.stildeEnd[i].segment(self.hiddenDim, self.hiddenEncDim * 2) = arg.contextSeqList[i]
-    #
-    #     self.stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i]);
-    #
-    # def calculateAlpha(self, arg, decState):
-    #     for i in range(arg.srcLen):
-    #         arg.alphaSeqVec.coeffRef(i, 0) = decState.h.dot(self.Wgeneral * arg.biEncState[i])
-    #
-    #     # softmax of ``alphaSeq``
-    #     arg.alphaSeqVec.array() -= arg.alphaSeqVec.maxCoeff() # stable softmax
-    #     arg.alphaSeqVec = arg.alphaSeqVec.array().exp() #exp() operation for all elements; np.exp(alphaSeq)
-    #     arg.alphaSeqVec /= arg.alphaSeqVec.array().sum() # alphaSeq.sum()
-    #
-    # def calculateAlpha(self, arg, decState, colNum):
-    #     for i in range(srcLen):
-    #         arg.alphaSeq.coeffRef(i, colNum) = decState.h.dot(self.Wgeneral*arg.biEncState[i])
-    #     arg.alphaSeq.col(colNum).array() -= arg.alphaSeq.col(colNum).maxCoeff() #stable softmax
-    #     arg.alphaSeq.col(colNum) = arg.alphaSeq.col(colNum).array().exp() #exp()  operation for all elements; np.exp(alphaSeq)
-    #     arg.alphaSeq.col(colNum) /= arg.alphaSeq.col(colNum).array().sum(); #alphaSeq.sum()
 
     def calcLoss(self, data, train):
         loss = 0.0
@@ -560,36 +496,6 @@ class StackLSTM(nn.Module):
 
     def __len__(self):
         return len(self._outputs_hist)
-
-class Arg:
-    def __init__(self, data, train):
-        self.srcLen = data.src.size()
-        self.tgtLen = data.tgt.size()
-        self.actLen = data.action.size()
-        self.outBufState = []
-        self.headStack = []
-        self.del_embedVec = {}
-        self.headList = {}
-        self.embedStack = []
-        self.embedList = {}
-
-        if train:
-            self.alphaSeq = torch.zeros(self.srcLen, self.tgtLen)
-            self.encStateEnd = torch.zeros(self.hiddenEncDim * 2)
-            self.del_encStateEnd = torch.zeros(self.hiddenEncDim * 2)
-            self.del_alphaSeq = torch.zeros(self.srcLen)
-            self.del_alphaSeqTmp = torch.zeros(self.hiddenEncDim)
-            self.del_WgeneralTmp = torch.zeros(self.hiddenEncDim * 2)
-            self.alphaSeqVec = torch.zeros(self.srcLen)
-        else:
-            self.alphaSeqVec = torch.zeros(self.srcLen)
-
-    def clear(self):
-        self.del_embedVec = {}
-        self.headStack = []
-        self.headList = {}
-        self.embedStack = []
-        self.embedList = {}
 
 class Data:
     def __init__(self, _train_src, _train_tgt, _train_action):
