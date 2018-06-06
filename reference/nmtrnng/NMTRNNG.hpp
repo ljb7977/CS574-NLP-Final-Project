@@ -3,7 +3,6 @@
 #include <stack>
 #include <tuple>
 #include "LSTM.hpp"
-#include "Affine.hpp"
 #include "Vocabulary.hpp"
 #include "SoftMax.hpp"
 #include "BlackOut.hpp"

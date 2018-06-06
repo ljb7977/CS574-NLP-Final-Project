@@ -124,10 +124,46 @@ class NMT_RNNG(nn.Module):
     def forward(self, src, tgt, actions, src_length, enc_hidden, train=True):
         output, (last_state, last_cell) = self.encode(src, src_length, enc_hidden)
         # 이 디코더의 output을 action sLSTM에 넣어야 한다.
-        for action in actions:
-            self.decoderAction(last_state, train=train)
-            decoded = self.decoder(last_state, tgt)
+        k = 0
+        j = 0
+        self.headStack.append(k)
+        k += 1
+        phraseNum = len(tgt)
+        for i in range(len(actions)):
+            actNum = actions[i]
+            action_decoded = self.decoderAction(last_state, action, train=train)
+            if self.actionVoc.tokenList[actNum].action == 0: #shift action
+                self.headStack.append(k)
+
+                decoded = self.decoder(last_state, tgt)
+                self.decoderAttention()
+                self.outBuf(self.col(self.targetEmbed, tgt[j]))
+                self.embedStack.append(j)
+
+                self.utEnd[i][:self.hiddenDim] # =arg.decState[j]->h;
+                # arg.utEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[j]->h;
+
+                j+=1
+            elif self.actionVoc.tokenList[actNum].action == 1: # Reduce left
+                self.decoderReduceLeft(phraseNum, i-1, k, True)
+                phraseNum+=1
+                self.utEnd[i][:self.hiddenDim] #= arg.decState[j - 1]->h;
+            elif self.actionVoc.tokenList[actNum].action == 2: #reduce right
+                self.decoderReduceRight(phraseNum, i-1, k, True)
+                phraseNum+=1
+                self.utEnd[i][:self.hiddenDim]  # = arg.decState[j - 1]->h;
+            else:
+                raise("Action Error: undefined Action")
+
+            self.utEnd[i][self.hiddenDim:self.hiddenDim*2] = self.outBufState[k-1].h
+            self.utEnd[i][self.hiddenDim*2:self.hiddenDim*2+self.hiddenActDim] = self.actState[i].h
+            # TODO Tensor concat
+
+            # self.ut.forward()
         return
+
+    def col(self, tensor, i):
+        return torch.t(torch.index_selec(tensor, 1, [i]))
 
     def encode(self, src, src_length, enc_hidden):
         src = src.view(-1, 1)
@@ -140,8 +176,8 @@ class NMT_RNNG(nn.Module):
         output = self.dec(enc_hidden_last)
         return output
 
-    def decoderAction(self, enc_last_state, train): # call forward for action LSTM
-        result = self.act(enc_last_state)
+    def decoderAction(self, enc_last_state, action, train): # call forward for action LSTM
+        result = self.act(enc_last_state, action) #TODO fix forward of act
         if train:
             pass
             # reset act's del?
@@ -150,6 +186,22 @@ class NMT_RNNG(nn.Module):
             # self.actState[i].delh = torch.zeros(self.hiddenActDim)
         return result
 
+    def decoderAttention(self, i):
+        self.contextSeqList[i] = torch.zeros(self.hiddenEncDim * 2)
+        self.calculateAlpha()
+        # arg.contextSeqList[i] = this->zeros2
+        #
+        # this->calculateAlpha(arg, arg.decState[i], i)
+        #
+        # for (int j = 0; j < arg.srcLen; ++j) {
+        #     arg.contextSeqList[i].noalias() += arg.alphaSeq.coeff(j, i) * arg.biEncState[j]
+        # }
+        # arg.stildeEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[i]->h
+        # arg.stildeEnd[i].seegment(this->hiddenDim, this->hiddenEncDim * 2).noalias() = arg.contextSeqList[i]
+        #
+        # this->stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i])
+
+
     def compositionFunc(self, phraseNum, head, dependent, relation):
         embedVecEnd = torch.cat((head, dependent, relation), 1)
         self.embedVecEnd[phraseNum - self.tgtLen] = embedVecEnd
@@ -157,7 +209,7 @@ class NMT_RNNG(nn.Module):
 
         return F.tanh(embed)
 
-    def decoderReduceLeft(self, data, phraseNum, actNum, k, train):
+    def decoderReduceLeft(self, tgt, phraseNum, actNum, k, train):
         top = self.reduceHeadStack(k)
         rightNum, leftNum = self.reduceStack()
 
@@ -170,8 +222,8 @@ class NMT_RNNG(nn.Module):
             # head = self.targetEmbed.col(data.tgt[rightNum])
             # dependent = self.targetEmbed.col(data.tgt[leftNum])
             # relation = self.self.actionEmbed.col(data.action[actNum])
-            head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))  # parent: right
-            dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]])) # child: left
+            head = self.col(self.targetEmbed, tgt[rightNum]) # parent: right
+            dependent = self.col(self.targetEmbed, tgt[leftNum])# child: left
             # self.compositionFunc(self.embedVec[phraseNum - self.tgtLen],
             #                      self.targetEmbed.col(data.tgt[rightNum]),
             #                      self.targetEmbed.col(data.tgt[leftNum]),
@@ -180,13 +232,13 @@ class NMT_RNNG(nn.Module):
         elif rightNum > (self.tgtLen - 1) and leftNum < self.tgtLen:
             rightNum -= self.tgtLen
 
-            head = self.embedVec[rightNum]                                                      # parent: right
-            dependent = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[leftNum]]))   # child: left,
+            head = self.embedVec[rightNum]              # parent: right
+            dependent = self.col(self.targetEmbed, tgt[leftNum]) # child: left
         elif rightNum < self.tgtLen and leftNum > (self.tgtLen - 1):
             leftNum -= self.tgtLen
 
-            head = torch.t(torch.index_select(self.targetEmbed, 1, [data.tgt[rightNum]]))       # parent: right
-            dependent = self.embedVec[leftNum]                                                  # child: left
+            head = self.col(self.targetEmbed, tgt[rightNum])        # parent: right
+            dependent = self.embedVec[leftNum]                      # child: left
             #
             # self.compositionFunc(,
             #                      self.targetEmbed.col(data.tgt[rightNum]),  # parent: right
@@ -199,14 +251,13 @@ class NMT_RNNG(nn.Module):
 
             head = self.embedVect[rightNum]         # parent: right
             dependent = self.embedVec[leftNum]      # child: left
-
             # self.compositionFunc(arg.embedVec[phraseNum - arg.tgtLen],
             #                      arg.embedVec[rightNum],  # parent: right
             #                      arg.embedVec[leftNum],  # child: left,
             #                      self.actionEmbed.col(data.action[actNum]),
             #                      arg.embedVecEnd[phraseNum - arg.tgtLen])
 
-        relation = torch.t(torch.index_select(self.actionEmbed, 1, [data.action[actNum]]))
+        relation = self.col(self.actionEmbed, action[actNum])
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(phraseNum, head, dependent, relation)
 
         self.outBuf(self.embedVec[phraseNum - self.tgtLen]) #TODO LSTM forward

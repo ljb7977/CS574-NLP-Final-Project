@@ -1,8 +1,7 @@
 #include "NMTRNNG.hpp"
-#include "ActFunc.hpp"
-#include "Optimizer.hpp"
-#include "Utils.hpp"
-#include "Affine.hpp"
+#include "N3LP/ActFunc.hpp"
+#include "N3LP/Optimizer.hpp"
+#include "N3LP/Affine.hpp"
 #include "N3LP/Matrix.hpp"
 #include "N3LP/Utils.hpp"
 #include <pthread.h>
