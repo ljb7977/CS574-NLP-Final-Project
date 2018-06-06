@@ -55,7 +55,6 @@ class NMT_RNNG(nn.Module):
         self.embedList = []
         self.actState = []
 
-        self.del_embedVec = {}
         self.headStack = []
         self.headList = []
         self.embedStack = []
@@ -70,7 +69,7 @@ class NMT_RNNG(nn.Module):
         utils.set_forget_bias(self.enc, 1.0)
 
         # decoder
-        self.dec = StackLSTM(input_size=self.inputDim, hidden_size=self.hiddenDim, bidirectional=True)
+        self.dec = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.dec, self.scale)
         utils.set_forget_bias(self.enc, 1.0)
 
@@ -78,7 +77,7 @@ class NMT_RNNG(nn.Module):
         self.act = StackLSTM(input_size=self.inputActDim, hidden_size=self.hiddenActDim)
         utils.lstm_init_uniform_weights(self.act, self.scale)
         utils.set_forget_bias(self.act, 1.0)
-        # out buffer
+        # out buffer, RNNG stack
         self.outBuf = StackLSTM(input_size=self.inputDim, hidden_size=self.hiddenDim)
         utils.lstm_init_uniform_weights(self.outBuf, self.scale)
         utils.set_forget_bias(self.outBuf, 1.0)
@@ -122,20 +121,24 @@ class NMT_RNNG(nn.Module):
                 Variable(weight.new(2, 1, self.hiddenEncDim).zero_()))
 
     def forward(self, src, tgt, actions, src_length, enc_hidden, train=True):
-        output, (last_state, last_cell) = self.encode(src, src_length, enc_hidden)
-        # 이 디코더의 output을 action sLSTM에 넣어야 한다.
-        k = 0
-        j = 0
+        output, (enc_last_state, last_cell) = self.encode(src, src_length, enc_hidden)
+        # 이 디코더의 output을 action sLSTM과 decoder LSTM에 넣어야 한다.
+        j, k, top = 0, 0, 0
         self.headStack.append(k)
         k += 1
+        length = len(src)
         phraseNum = len(tgt)
         for i in range(len(actions)):
             actNum = actions[i]
-            action_decoded = self.decoderAction(last_state, action, train=train)
-            if self.actionVoc.tokenList[actNum].action == 0: #shift action
-                self.headStack.append(k)
+            if i == 0:
+                action_decoded = self.decoderAction(enc_last_state, 0, train=train) # 일단 0일때는 action 0으로 설정
+            else:
+                action_decoded = self.decoderAction(enc_last_state, actions[i-1], train=train)
 
-                decoded = self.decoder(last_state, tgt)
+            if self.actionVoc.tokenList[actNum][2] == 0: #shift action
+                self.headStack.append(k) #push to headStack
+
+                decoded = self.decoder(enc_last_state) #decoder forward 1 step
                 self.decoderAttention()
                 self.outBuf(self.col(self.targetEmbed, tgt[j]))
                 self.embedStack.append(j)
@@ -144,11 +147,11 @@ class NMT_RNNG(nn.Module):
                 # arg.utEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[j]->h;
 
                 j+=1
-            elif self.actionVoc.tokenList[actNum].action == 1: # Reduce left
+            elif self.actionVoc.tokenList[actNum][2] == 1: # Reduce left
                 self.decoderReduceLeft(phraseNum, i-1, k, True)
                 phraseNum+=1
                 self.utEnd[i][:self.hiddenDim] #= arg.decState[j - 1]->h;
-            elif self.actionVoc.tokenList[actNum].action == 2: #reduce right
+            elif self.actionVoc.tokenList[actNum][2] == 2: #reduce right
                 self.decoderReduceRight(phraseNum, i-1, k, True)
                 phraseNum+=1
                 self.utEnd[i][:self.hiddenDim]  # = arg.decState[j - 1]->h;
@@ -159,11 +162,12 @@ class NMT_RNNG(nn.Module):
             self.utEnd[i][self.hiddenDim*2:self.hiddenDim*2+self.hiddenActDim] = self.actState[i].h
             # TODO Tensor concat
 
+            k+=1
             # self.ut.forward()
         return
 
     def col(self, tensor, i):
-        return torch.t(torch.index_selec(tensor, 1, [i]))
+        return torch.t(torch.index_select(tensor, 1, [i]))
 
     def encode(self, src, src_length, enc_hidden):
         src = src.view(-1, 1)
@@ -172,9 +176,9 @@ class NMT_RNNG(nn.Module):
         output, (last_state, last_cell) = self.enc(src_embed, enc_hidden)
         return output, (last_state, last_cell)
 
-    def decoder(self, enc_hidden_last, tgt):
-        output = self.dec(enc_hidden_last)
-        return output
+    def decoder(self, input, dec_hidden):
+        output, (last_state, last_cell) = self.dec(input, dec_hidden)
+        return output, (last_state, last_cell)
 
     def decoderAction(self, enc_last_state, action, train): # call forward for action LSTM
         result = self.act(enc_last_state, action) #TODO fix forward of act

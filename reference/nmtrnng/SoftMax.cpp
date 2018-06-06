@@ -1,6 +1,8 @@
+#include <cmath>
+#include <fstream>
 #include "SoftMax.hpp"
-#include "ActFunc.hpp"
-#include "Utils.hpp"
+#include "N3LP/Matrix.hpp"
+#include "N3LP/Utils.hpp"
 
 void SoftMax::calcDist(const VecD& input, VecD& output){
   output = this->bias;

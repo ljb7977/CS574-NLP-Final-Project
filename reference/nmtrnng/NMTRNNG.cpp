@@ -14,6 +14,7 @@
 #include <fstream>
 #include <assert.h>
 #include <sstream>
+#include <cmath>
 
 /* NMT + RNNG + Transition-based Dependency parser:
    Paper: "Learning to Parse and Translate Improves Neural Machine Translation"
@@ -538,7 +539,7 @@ void NMTRNNG::decoderAttention(NMTRNNG::ThreadArg &arg,
         arg.contextSeqList[i].noalias() += arg.alphaSeq.coeff(j, i) * arg.biEncState[j];
     }
     arg.stildeEnd[i].segment(0, this->hiddenDim).noalias() = arg.decState[i]->h;
-    arg.stildeEnd[i].seegment(this->hiddenDim, this->hiddenEncDim * 2).noalias() = arg.contextSeqList[i];
+    arg.stildeEnd[i].segment(this->hiddenDim, this->hiddenEncDim * 2).noalias() = arg.contextSeqList[i];
 
     this->stildeAffine.forward(arg.stildeEnd[i], arg.s_tilde[i]);
 }
@@ -600,8 +601,8 @@ void NMTRNNG::translate(NMTRNNG::Data *data,
                                   arg.candidate[j].s_tilde,
                                   &arg.candidate[j].prevDec, &arg.candidate[j].curDec);
             }
-            this->decoderAttention(arg, &arg.candidate[j].curDec, arg.candidate[j].contextSeq, arg.candidate[j].s_tilde,
-                                   stildeEnd);
+            this->decoderAttention(arg, &arg.candidate[j].curDec, arg.candidate[j].contextSeq,
+                                   arg.candidate[j].s_tilde, stildeEnd);
             if (!this->useBlackOut) {
                 this->softmax.calcDist(arg.candidate[j].s_tilde, arg.candidate[j].targetDist);
             } else {
@@ -1484,7 +1485,6 @@ void NMTRNNG::train(NMTRNNG::Data *data,
 
 void NMTRNNG::calculateAlpha(NMTRNNG::ThreadArg &arg,
                              const LSTM::State *decState) { // calculate attentional weight;
-
     for (int i = 0; i < arg.srcLen; ++i) {
         arg.alphaSeqVec.coeffRef(i, 0) = decState->h.dot(this->Wgeneral * arg.biEncState[i]);
     }
@@ -1597,7 +1597,6 @@ bool NMTRNNG::trainOpenMP(NMTRNNG::Grad &grad) {
         }
 
     }
-
     // Save a model
     std::string currentModelFileName;
     std::string currentGradFileName;
@@ -1625,7 +1624,6 @@ bool NMTRNNG::trainOpenMP(NMTRNNG::Grad &grad) {
             actNum += this->devData[i]->action.size();
         }
     }
-
     endTmp = std::chrono::system_clock::now();
 
     std::cout << "Evaluation time for this epoch: "

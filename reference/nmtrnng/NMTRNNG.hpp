@@ -196,10 +196,9 @@ public:
   void train(NMTRNNG::Data* data, 
 	     NMTRNNG::ThreadArg& arg, 
 	     NMTRNNG::Grad& grad, 
-	     const bool train);
+	     const bool train=true);
   void sgd(const NMTRNNG::Grad& grad, 
 	   const Real learningRate);
-  void train();
   bool trainOpenMP(NMTRNNG::Grad& grad);
   void calculateAlpha(NMTRNNG::ThreadArg& arg, 
 		      const LSTM::State* decState);
