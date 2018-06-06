@@ -177,10 +177,12 @@ class NMT_RNNG(nn.Module):
             utEnd = torch.cat((dec_h1, out_h1, act_h1))
             utEnds.append(utEnd)
             ut = F.tanh(self.utAffine(utEnd))
+            # self.ut.forward()
             uts.append(ut)
 
             k+=1
-            # self.ut.forward()
+
+        #now calculate loss and backpropagate
         return #act, dec, out h1 and c1, s_tilde
 
     def getAction(self, actNum):
