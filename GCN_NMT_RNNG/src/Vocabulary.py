@@ -14,7 +14,7 @@ class Vocabulary(object):
         unkCount = 0
         eosCount = 0
         tokenCount = {}
-        with open(trainFile) as f:
+        with open(trainFile, encoding="utf-8") as f:
             for line in f:
                 eosCount += 1
                 tokens = re.split('[ \t\n]', line)
