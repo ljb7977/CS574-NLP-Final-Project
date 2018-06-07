@@ -177,7 +177,7 @@ class NMT_RNNG(nn.Module):
             act_h1, act_c1 = self.decoderAction(self.actionEmbed[i-1]) #put prev action
 
             if self.getAction(actNum) == 0: #shift action
-                print("SHIFT")
+                # print("SHIFT")
                 self.headStack.push(k) #push to headStack
                 dec_h1, dec_c1 = self.decoder(s_tilde, dec_h1, dec_c1) #TODO decoder forward 1 step with stilde
                 context_vec = self.calcContextVec(dec_h1, enc_output)
@@ -191,11 +191,11 @@ class NMT_RNNG(nn.Module):
                 s_tildes.append(s_tilde)
                 j+=1
             elif self.getAction(actNum) == 1: # Reduce left
-                print("REDUCE_LEFT")
+                # print("REDUCE_LEFT")
                 self.decoderReduceLeft(phraseNum, i-1, k, True)
                 phraseNum+=1
             elif self.getAction(actNum) == 2: #reduce right
-                print("REDUCE_RIGHT")
+                # print("REDUCE_RIGHT")
                 self.decoderReduceRight(phraseNum, i-1, k, True)
                 phraseNum+=1
             else:
@@ -208,23 +208,9 @@ class NMT_RNNG(nn.Module):
 
             k+=1
 
-        # # calc softmax of uts adn stildes
-        # predicted_actions = []
-        # for ut in uts:
-        #     print(F.log_softmax(ut, dim=1))
-        #     predicted_actions.append(F.softmax(ut, dim=1))
-        # #print("action pred", predicted_actions)
         uts = self.actionPredAffine(torch.stack(uts))
         s_tildes = self.wordPredAffine(torch.stack(s_tildes))
         return uts, s_tildes
-        #
-        # act_loss = 0
-        # for ut, action in zip(uts, self.actionEmbed):
-        #     act_loss += criterion(ut, action)
-        # loss = 0
-        # for word, target in zip(s_tildes, self.targetEmbed):
-        #     loss += criterion(word, target)
-        # return act_loss, loss
 
     def getAction(self, actNum):
         return self.actionVoc.tokenList[actNum][2]

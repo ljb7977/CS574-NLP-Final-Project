@@ -63,17 +63,25 @@ class Translator(object):
                 act_loss = criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
                 act_loss.backward(retain_graph=True)
 
-                predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
+                predicted_words = F.softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
 
                 loss = 0
                 for i in range(len(train_tgt)):
+                    # print(i, train_tgt[i])
+                    # print(predicted_words[i][train_tgt[i]])
+                    # print(-torch.log(predicted_words[i][train_tgt[i]]))
                     try:
+                        topv, topi = predicted_words[i].topk(1)
+                        print(self.targetVoc.tokenList[topi], end=" ")
                         loss += -torch.log(predicted_words[i][train_tgt[i]])
                     except:
                         break
+                print("")
                 # loss = NLL(predicted_words, train_tgt[:len(predicted_words)])
                 loss.backward()
                 optimizer.step()
+                print("loss: ", loss, end="\t")
+                print("act_loss:", act_loss)
         return
 
     def loadCorpus(self, src, tgt, act, data):
