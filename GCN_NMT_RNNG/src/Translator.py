@@ -58,13 +58,13 @@ class Translator(object):
                 src_length = len(data_in_batch.src)
                 enc_hidden = self.model.enc_init_hidden()
                 uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden, criterion)
-
+                #print(s_tildes)
                 # Backward(Action)
                 act_loss = criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
                 act_loss.backward(retain_graph=True)
 
                 predicted_words = F.softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
-
+                #print(predicted_words)
                 loss = 0
                 for i in range(len(train_tgt)):
                     # print(i, train_tgt[i])

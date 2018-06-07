@@ -247,9 +247,9 @@ class NMT_RNNG(nn.Module):
     def calcContextVec(self, dec_h1, enc_output):
         temp = torch.t(self.attnScore(dec_h1))
 
-        attention_score = torch.matmul(enc_output, temp)
+        attention_score = torch.t(torch.matmul(enc_output, temp))
 
-        alpha = torch.t(F.softmax(attention_score, dim=1))
+        alpha = F.softmax(attention_score)
         # print(alpha.shape)
         context_vec = torch.matmul(alpha, enc_output)
         return context_vec
