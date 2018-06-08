@@ -1,11 +1,11 @@
 import Translator
 
-t = Translator.Translator(srcTrain='../data/new/train.en',
-                          tgtTrain='../data/new/train.kr',
-                          actTrain='../data/new/train.oracle.kr',
-                          srcDev='../data/new/dev.en',
-                          tgtDev='../data/new/dev.kr',
-                          actDev='../data/new/dev.oracle.kr',
+t = Translator.Translator(srcTrain='../data/train.kr',
+                          tgtTrain='../data/train.en',
+                          actTrain='../data/train.oracle.en',
+                          srcDev='../data/dev.kr',
+                          tgtDev='../data/dev.en',
+                          actDev='../data/dev.oracle.en',
                           srcVocaThreshold=1,
                           tgtVocaThreshold=1)
 

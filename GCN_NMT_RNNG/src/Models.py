@@ -222,7 +222,7 @@ class NMT_RNNG(nn.Module):
             k+=1
 
         uts = self.actionPredAffine(torch.stack(uts))
-        print(s_tildes[0])
+        #print(s_tildes[0])
         s_tildes = self.wordPredAffine(torch.stack(s_tildes))
         return uts, s_tildes
 
