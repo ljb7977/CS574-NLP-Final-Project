@@ -49,6 +49,8 @@ class Translator(object):
             indices = permutation[startIdx:endIdx]
             batch_trainData = [self.trainData[i] for i in indices]
 
+            loss = 0
+            act_loss = 0
             for data_in_batch in batch_trainData:
                 optimizer.zero_grad()
                 train_src = torch.LongTensor(data_in_batch.src)
@@ -58,34 +60,34 @@ class Translator(object):
                 src_length = len(data_in_batch.src)
                 enc_hidden = self.model.enc_init_hidden()
                 uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden, criterion)
-                #print(s_tildes)
-                # Backward(Action)
-                act_loss = criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
-                act_loss.backward(retain_graph=True)
 
-                predicted_words = F.softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
-                #print(predicted_words)
-                loss = 0
+                # Backward(Action)
+                act_loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
+
+
+                predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
+
                 for i in range(len(train_tgt)):
                     # print(i, train_tgt[i])
                     # print(predicted_words[i][train_tgt[i]])
                     # print(-torch.log(predicted_words[i][train_tgt[i]]))
                     try:
                         topv, topi = predicted_words[i].topk(1)
-                        print(self.targetVoc.tokenList[topi], end=" ")
-                        loss += -torch.log(predicted_words[i][train_tgt[i]])
+                        print(self.targetVoc.tokenList[topi][0], end=" ")
+                        loss += -(predicted_words[i][train_tgt[i]])
                     except:
                         break
                 print("")
                 # loss = NLL(predicted_words, train_tgt[:len(predicted_words)])
-                loss.backward()
-                optimizer.step()
-                print("loss: ", loss, end="\t")
-                print("act_loss:", act_loss)
+            act_loss.backward(retain_graph=True)
+            loss.backward()
+            optimizer.step()
+            print("loss: ", round(float(loss), 2), end="\t")
+            print("act_loss:", round(float(act_loss), 2))
         return
 
     def loadCorpus(self, src, tgt, act, data):
-        with open(src) as f:
+        with open(src, encoding="utf-8") as f:
             for line in f:
                 data.append(Data())
                 tokens = re.split('[ \t\n]', line)
@@ -113,7 +115,7 @@ class Translator(object):
             for line in f:
                 tokens = re.split('[ \t\n]', line)
                 tokens = [x for x in tokens if x != '']
-                if tokens:
+                if len(tokens) > 0:
                     if tokens[0] in self.actionVoc.tokenIndex:
                         data[idx].action.append(self.actionVoc.tokenIndex[tokens[0]])
                     else:
