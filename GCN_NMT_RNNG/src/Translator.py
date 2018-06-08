@@ -50,9 +50,9 @@ class Translator(object):
             batch_trainData = [self.trainData[i] for i in indices]
 
             loss = 0
-            act_loss = 0
+            # act_loss = 0
+            optimizer.zero_grad()
             for data_in_batch in batch_trainData:
-                optimizer.zero_grad()
                 train_src = torch.LongTensor(data_in_batch.src)
                 train_tgt = torch.LongTensor(data_in_batch.tgt)
                 train_action = torch.LongTensor(data_in_batch.action)
@@ -62,28 +62,29 @@ class Translator(object):
                 uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden, criterion)
 
                 # Backward(Action)
-                act_loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
-
+                loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
 
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
 
-                for i in range(len(train_tgt)):
-                    # print(i, train_tgt[i])
-                    # print(predicted_words[i][train_tgt[i]])
-                    # print(-torch.log(predicted_words[i][train_tgt[i]]))
-                    try:
-                        topv, topi = predicted_words[i].topk(1)
-                        print(self.targetVoc.tokenList[topi][0], end=" ")
-                        loss += -(predicted_words[i][train_tgt[i]])
-                    except:
-                        break
+                # for i in range(len(train_tgt)):
+                #     try:
+                #         topv, topi = predicted_words[i].topk(1)
+                #         print(self.targetVoc.tokenList[topi][0], end=" ")
+                #         loss += -(predicted_words[i][train_tgt[i]])
+                #     except:
+                #         break
+                for i in range(list(predicted_words.shape)[0]):
+                    topv, topi = predicted_words[i].topk(1)
+                    print(self.targetVoc.tokenList[topi][0], end=" ")
                 print("")
-                # loss = NLL(predicted_words, train_tgt[:len(predicted_words)])
-            act_loss.backward(retain_graph=True)
-            loss.backward()
+                for i in range(min(list(predicted_words.shape)[0], len(train_tgt))):
+                    loss += NLL(predicted_words[i].view(1, -1), torch.LongTensor([train_tgt[i]]))
+
+            # act_loss.backward(retain_graph=True)
+            loss.backward(retain_graph=True)
             optimizer.step()
-            print("loss: ", round(float(loss), 2), end="\t")
-            print("act_loss:", round(float(act_loss), 2))
+            print("loss: ", round(loss.item(), 2))
+            # print("act_loss:", round(float(act_loss), 2))
         return
 
     def loadCorpus(self, src, tgt, act, data):

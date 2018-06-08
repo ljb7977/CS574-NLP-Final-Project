@@ -63,7 +63,7 @@ class NMT_RNNG(nn.Module):
         #embedding
         self.srcEmbedding = nn.Embedding(len(self.sourceVoc.tokenList), self.inputDim)
         self.actEmbedding = nn.Embedding(len(self.actionVoc.tokenList), self.inputActDim)
-        self.tgtEmbedding = nn.Embedding(len(self.targetVoc.tokenList), self.hiddenDim)
+        self.tgtEmbedding = nn.Embedding(len(self.targetVoc.tokenList), self.inputDim)
 
         # encoder
         self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True)
@@ -168,7 +168,7 @@ class NMT_RNNG(nn.Module):
         s_tildes.append(s_tilde)
 
         self.outBuf = [(torch.rand(1, self.hiddenDim), torch.rand(1, self.hiddenDim))]  # 혹은 zero
-        outBuf = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
+        outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         # print(self.targetEmbed[j].shape)
         out_h1, out_c1 = outBuf(self.targetEmbed[j].view(1, -1), self.outBuf[0]) #0번째 target word embedding 넣음
         self.outBuf.append((out_h1, out_c1))  # add h and c to outBuf[k]
@@ -194,7 +194,7 @@ class NMT_RNNG(nn.Module):
 
                 # if(j - 1 < len(self.targetEmbed)):
                 # print(j, k)
-                outBuf = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
+                outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
                 h1, c1 = outBuf(self.targetEmbed[j - 1].view(1, -1), self.outBuf[k-1])
                 self.outBuf.append((h1, c1)) #add h and c to outBuf[k]
                 # else:
@@ -268,7 +268,7 @@ class NMT_RNNG(nn.Module):
         # print("h0, c", dec_hidden.shape, context_vec.shape)
         dec_hidden = torch.cat((dec_hidden, context_vec), 1)
         # print("concat", dec_hidden.shape)
-        return F.tanh(self.stildeAffine(dec_hidden)) # return s_tilde
+        return F.relu(self.stildeAffine(dec_hidden)) # return s_tilde
 
     def compositionFunc(self, head, dependent, relation):
         embedVecEnd = torch.cat((head, dependent, relation))
@@ -303,7 +303,7 @@ class NMT_RNNG(nn.Module):
         relation = self.actionEmbed[actNum]
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(head, dependent, relation)
 
-        outBuf = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
+        outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         h1, c1 = outBuf(self.embedVec[phraseNum - self.tgtLen].view(1, -1), self.outBuf[top])
         self.outBuf.append((h1, c1))  #add h and c to outBuf[k]
         self.embedStack.push(phraseNum)
@@ -338,7 +338,7 @@ class NMT_RNNG(nn.Module):
         relation = self.actionEmbed[actNum]
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(head, dependent, relation)
 
-        outBuf = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
+        outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         h1, c1 = outBuf(self.embedVec[phraseNum - self.tgtLen].view(1, -1), self.outBuf[top])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
         self.embedStack.push(phraseNum)
