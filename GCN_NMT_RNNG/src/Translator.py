@@ -120,8 +120,12 @@ class Translator(object):
                     if tokens[0] in self.actionVoc.tokenIndex:
                         data[idx].action.append(self.actionVoc.tokenIndex[tokens[0]])
                     else:
-                        print("Error: Unknown word except shift/reduce.")
-                        exit(1)
+                        if "LEFT" in tokens[0]:
+                            data[idx].action.append(self.actionVoc.tokenIndex['REDUCE-LEFT-ARC(unk)'])
+                        elif "RIGHT" in tokens[0]:
+                            data[idx].action.append(self.actionVoc.tokenIndex['REDUCE-RIGHT-ARC(unk)'])
+                        else:
+                            print("Error: Unknown word except shift/reduce.")
                 else:
                     idx += 1
         return data
@@ -167,7 +171,7 @@ class Translator(object):
                               saveDirName)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
-        optimizer = optim.SGD(self.model.parameters(), lr=learningRate)
+        optimizer = optim.Adam(self.model.parameters(), lr=learningRate, weight_decay=0.005, amsgrad=True)
         criterion = nn.CrossEntropyLoss()
         NLL = nn.NLLLoss()
         print("# of Training Data:\t" + str(len(self.trainData)))
@@ -179,3 +183,28 @@ class Translator(object):
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
             status = self.train(criterion, NLL, optimizer)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
