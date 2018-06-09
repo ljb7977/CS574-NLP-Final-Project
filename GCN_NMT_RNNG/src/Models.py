@@ -20,15 +20,9 @@ class NMT_RNNG(nn.Module):
                  hiddenDim,
                  hiddenActDim,
                  scale,
-                 clipThreshold,
-                 beamSize,
-                 maxLen,
                  miniBatchSize,
-                 threadNum,
                  learningRate,
                  isTest,
-                 startIter,
-                 saveDirName,
                  useGCN,
                  gcnDim):
         super(NMT_RNNG, self).__init__()
@@ -44,15 +38,9 @@ class NMT_RNNG(nn.Module):
         self.hiddenDim = hiddenDim
         self.hiddenActDim = hiddenActDim
         self.scale = scale
-        self.clipThreshold = clipThreshold
-        self.beamSize = beamSize
-        self.maxLen = maxLen
         self.miniBatchSize = miniBatchSize
-        self.threadNum = threadNum
         self.learningRate = learningRate
         self.isTest = isTest
-        self.startIter = startIter
-        self.saveDirName = saveDirName
         self.useGCN = useGCN
         self.gcnDim = gcnDim
 
@@ -72,8 +60,7 @@ class NMT_RNNG(nn.Module):
         self.tgtEmbedding = nn.Embedding(len(self.targetVoc.tokenList), self.inputDim)
 
         # encoder
-        self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True,
-                           dropout=0.3)
+        self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.enc, self.scale)
         utils.set_forget_bias(self.enc, 1.0)
 
@@ -85,46 +72,46 @@ class NMT_RNNG(nn.Module):
             self.num_labels = len(self.deprelVoc.tokenList)
 
             self.W_in = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
-            nn.init.xavier_normal(self.W_in)
+            nn.init.xavier_normal_(self.W_in)
 
             self.b_in_list = []
             for i in range(self.num_labels):
                 b_in = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-                nn.init.constant(b_in, 0)
+                nn.init.constant_(b_in, 0)
                 self.b_in_list.append(b_in)
 
             self.W_in_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-            nn.init.uniform(self.W_in_gate)
+            nn.init.uniform_(self.W_in_gate)
 
             self.b_in_gate_list = []
             for i in range(self.num_labels):
                 b_in_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-                nn.init.constant(b_in_gate, 1)
+                nn.init.constant_(b_in_gate, 1)
                 self.b_in_gate_list.append(b_in_gate)
 
             self.W_out = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
-            nn.init.xavier_normal(self.W_out)
+            nn.init.xavier_normal_(self.W_out)
 
             self.b_out_list = []
             for i in range(self.num_labels):
                 b_out = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-                nn.init.constant(b_out, 0)
+                nn.init.constant_(b_out, 0)
                 self.b_out_list.append(b_out)
 
             self.W_out_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-            nn.init.uniform(self.W_out_gate)
+            nn.init.uniform_(self.W_out_gate)
 
             self.b_out_gate_list = []
             for i in range(self.num_labels):
                 b_out_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-                nn.init.constant(b_out_gate, 1)
+                nn.init.constant_(b_out_gate, 1)
                 self.b_out_gate_list.append(b_out_gate)
 
             self.W_self_loop = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
-            nn.init.xavier_normal(self.W_self_loop)
+            nn.init.xavier_normal_(self.W_self_loop)
 
             self.W_self_loop_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
-            nn.init.uniform(self.W_self_loop_gate)
+            nn.init.uniform_(self.W_self_loop_gate)
         ################################################################
 
         # decoder
@@ -167,7 +154,7 @@ class NMT_RNNG(nn.Module):
         self.wordPredAffine = nn.Linear(self.hiddenDim, len(self.targetVoc.tokenList))
         utils.linear_init(self.wordPredAffine, self.scale)
         # for automatic tuning
-        self.prevPerp = float('inf')
+        self.prevPerp = -100000
 
     def enc_init_hidden(self):
         weight = next(self.parameters()).data
