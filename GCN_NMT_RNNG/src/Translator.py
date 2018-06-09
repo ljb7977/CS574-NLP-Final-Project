@@ -228,7 +228,7 @@ class Translator(object):
             idx += 1
         return data
 
-    def conll_to_action(self, tgt, num):
+    def conll_to_action(self, tgt, num_):
         cnt = 0
         if 'dev' in tgt:
             oracle_fname = '../data/processed/dev.oracle.en'
@@ -276,14 +276,14 @@ class Translator(object):
                 oracle_f.write(arc + '\n')
             oracle_f.write('\n')
             cnt += 1
-            if cnt == num:
+            if cnt == num_:
                 break
         tagged_file.close()
         oracle_f.close()
         plain_f.close()
         return txt_fname, oracle_fname
 
-    def conll_to_deprels(self, src, num):
+    def conll_to_deprels(self, src, num_):
         cnt = 0
         if 'dev' in src:
             deprels_fname = '../data/processed/dev.deprel.kr'
@@ -323,7 +323,7 @@ class Translator(object):
                     plain_f.write(token)
             plain_f.write('\n')
             cnt += 1
-            if cnt == num:
+            if cnt == num_:
                 break
         pickle.dump(deprels, deprels_f)
         tagged_file.close()

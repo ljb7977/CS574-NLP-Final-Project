@@ -1,7 +1,7 @@
 import Translator
 
 t = Translator.Translator(mode='train',
-                          prepocessed=False,
+                          prepocessed=False ,
                           srcVocaThreshold=1,
                           tgtVocaThreshold=1,
                           deprelLabelThreshold=1,
