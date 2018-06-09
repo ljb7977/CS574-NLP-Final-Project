@@ -209,6 +209,7 @@ class NMT_RNNG(nn.Module):
         act_c1 = torch.rand(1, 1, self.hiddenActDim)
 
         self.outBuf = [(torch.rand(1, self.hiddenDim), torch.rand(1, self.hiddenDim))]  # 혹은 zero
+        print(len(self.targetEmbed), len(self.outBuf))
         h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
 

@@ -7,7 +7,7 @@ import Translator
 #   testSize < 10001
 #   devSize < 10001
 t = Translator.Translator(mode='train',
-                          prepocessed=False,
+                          prepocessed=False ,
                           srcVocaThreshold=1,
                           tgtVocaThreshold=1,
                           deprelLabelThreshold=1,
