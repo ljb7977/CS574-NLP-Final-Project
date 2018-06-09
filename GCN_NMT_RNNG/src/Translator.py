@@ -9,8 +9,10 @@ import random
 import math
 import utils
 import pickle
+import os
+import errno
+import bleu
 
-from torchviz import make_dot, make_dot_from_trace
 
 class Data(object):
     def __init__(self):
@@ -23,21 +25,36 @@ class Data(object):
 
 class Translator(object):
     def __init__(self,
-                 srcTrain_tagged,
-                 tgtTrain_tagged,
-                 srcDev_tagged,
-                 tgtDev_tagged,
+                 mode,
+                 prepocessed,
                  srcVocaThreshold,
                  tgtVocaThreshold,
-                 deprelLabelThreshold):
-        #train_size = 20000
-        print('Parsing target file into plain sentences & actions...')
-        tgtTrain, actTrain = self.conll_to_action(tgtTrain_tagged)
-        tgtDev, actDev = self.conll_to_action(tgtDev_tagged)
-        print('Parsing source file into plain sentences & dependency relations...')
-        srcTrain, deprelTrain = self.conll_to_deprels(srcTrain_tagged)
-        srcDev, deprelDev = self.conll_to_deprels(srcDev_tagged)
+                 deprelLabelThreshold,
+                 printEvery):
+        if prepocessed:
+            tgtTrain = '../data/processed/train.en'
+            actTrain = '../data/processed/train.oracle.en'
+            tgtDev = '../data/processed/dev.en'
+            actDev = '../data/processed/dev.oracle.en'
+            #tgtTest = '../data/processed/test.en'
+            #actTest = '../data/processed/test.oracle.en'
+            srcTrain = '../data/processed/train.kr'
+            deprelTrain = '../data/processed/train.deprel.kr'
+            srcDev = '../data/processed/dev.kr'
+            deprelDev = '../data/processed/dev.deprel.kr'
+            #srcTest = '../data/processed/test.kr'
+            #deprelTest = '../data/processed/test.deprel.kr'
+        else:
+            devNum = 100
+            trainNum = 5000
+            print('Parsing target file into plain sentences & actions...')
+            tgtTrain, actTrain = self.conll_to_action('../data/tagged_train.en', trainNum)
+            tgtDev, actDev = self.conll_to_action('../data/tagged_dev.en', devNum)
+            print('Parsing source file into plain sentences & dependency relations...')
+            srcTrain, deprelTrain = self.conll_to_deprels('../data/tagged_train.kr', trainNum)
+            srcDev, deprelDev = self.conll_to_deprels('../data/tagged_dev.kr', devNum)
 
+        print('Loading processed data...')
         self.sourceVoc = Vocabulary(srcTrain, srcVocaThreshold, 'lang')
         self.targetVoc = Vocabulary(tgtTrain, tgtVocaThreshold, 'lang')
         self.actionVoc = Vocabulary(actTrain, None, 'action')
@@ -46,6 +63,8 @@ class Translator(object):
         self.devData = []
         self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, deprelTrain,  self.trainData)
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, deprelDev, self.devData)
+        self.printEvery = printEvery
+        print('Loaded...')
 
     def train(self, criterion, NLL, optimizer, train=True):
         permutation = list(range(0, len(self.trainData)))
@@ -62,15 +81,13 @@ class Translator(object):
 
             loss = 0
             optimizer.zero_grad()
+            self.model.zero_grad()
             index = 0
             for data_in_batch in batch_trainData:
                 index += 1
 
                 data_in_batch.src.pop()
                 data_in_batch.tgt.pop()
-                #remove eos
-
-                # print(self.targetVoc.tokenList[data_in_batch.tgt[-1]][0])
 
                 train_src = torch.LongTensor(data_in_batch.src)
                 train_tgt = torch.LongTensor(data_in_batch.tgt)
@@ -84,44 +101,76 @@ class Translator(object):
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
                 torch.set_printoptions(threshold=10000)
                 # print(predicted_words[0])
-                print("in batch "+str(batch_i)+", "+str(index)+"th data")
-
-                print("source: ", end="")
-                for i in data_in_batch.src:
-                    print(self.sourceVoc.tokenList[i][0], end=" ")
-                print("\ngold: ", end="")
-                for i in data_in_batch.tgt:
-                    print(self.targetVoc.tokenList[i][0], end=" ")
-                print("\ntarget: ", end="")
-                for i in range(list(predicted_words.shape)[0]):
-                    topv, topi = predicted_words[i].topk(1)
-                    print(self.targetVoc.tokenList[topi][0], end=" ")
-                print("\n")
-
+                if index % self.printEvery == 0:
+                    print("in batch "+str(batch_i)+", "+str(index)+"th data")
+                    predictedWords = []
+                    targetWords = []
+                    print("source: ", end="")
+                    for i in data_in_batch.src:
+                        print(self.sourceVoc.tokenList[i][0], end=" ")
+                    print("\ngold: ", end="")
+                    for i in data_in_batch.tgt:
+                        w = self.targetVoc.tokenList[i][0]
+                        targetWords.append(w)
+                        print(w, end=" ")
+                    print("\ntarget: ", end="")
+                    for i in range(list(predicted_words.shape)[0]):
+                        topv, topi = predicted_words[i].topk(1)
+                        w = self.targetVoc.tokenList[topi][0]
+                        predictedWords.append(w)
+                        print(w, end=" ")
+                    print("\n")
                 loss_t = 0
                 word_cnt = 0
                 for i in range(min(list(predicted_words.shape)[0], len(train_tgt))):
-                    topv, topi = predicted_words[i].topk(1)
-                    if self.targetVoc.tokenList[topi][0] == '.':
-                        continue
                     loss_t += NLL(predicted_words[i].view(1, -1), torch.LongTensor([train_tgt[i]]))
-                    word_cnt+=1
+                    word_cnt += 1
                 if word_cnt != 0:
                     loss += loss_t / word_cnt
 
                 # Backward(Action)
                 loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
-            # dot = make_dot(uts, params=dict(self.model.named_parameters()))
-            # with open("uts.dot", "w") as f:
-            #     f.write(str(dot))
-            # dot = make_dot(s_tildes, params=dict(self.model.named_parameters()))
-            # with open("stildes.dot", "w") as f:
-            #     f.write(str(dot))
-            print("loss: ", round(loss.item(), 2))
+            loss_val = round(loss.item(), 2)/len(batch_trainData)
+            print("loss: ", loss_val)
+            print("processing backward() and optimizer.step()...")
             loss.backward()
             optimizer.step()
+            print("done...")
+            print("compute BLEU score")
+            self.computeBLEU()
 
-        return
+
+    def computeBLEU(self):
+        predictedSentences = []
+        goldSentences = []
+        for data in self.devData:
+            dev_src = torch.LongTensor(data.src)
+            dev_tgt = torch.LongTensor(data.tgt)
+            dev_action = torch.LongTensor(data.action)
+            dev_deprel = data.deprel
+            src_length = len(data.src)
+            enc_hidden = self.model.enc_init_hidden()
+            uts, s_tildes = self.model(dev_src, dev_tgt, dev_action, dev_deprel, src_length, enc_hidden)
+            predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
+            predictedWords = []
+            targetWords = []
+            for i in data.tgt:
+                w = self.targetVoc.tokenList[i][0]
+                targetWords.append(w)
+            for i in range(list(predicted_words.shape)[0]):
+                topv, topi = predicted_words[i].topk(1)
+                w = self.targetVoc.tokenList[topi][0]
+                predictedWords.append(w)
+            predictedSentences.append(predictedWords)
+            goldSentences.append(targetWords)
+            # torch.set_printoptions(threshold=10000)
+        bleu_val = bleu.BLEU1(predictedSentences, goldSentences)
+        print('BLEU1 score: ' + str(bleu_val))
+        if bleu_val < self.model.prevPerp:
+            self.model.prevPerp = bleu_val
+            print('New high score, saving model to ' + self.modelPath)
+            torch.save(self.model.state_dict(), self.modelPath)
+
 
     def loadCorpus(self, src, tgt, act, deprel, data):
         with open(src, encoding="utf-8") as f:
@@ -176,7 +225,7 @@ class Translator(object):
             idx += 1
         return data
 
-    def conll_to_action(self, tgt):
+    def conll_to_action(self, tgt, num):
         cnt = 0
         if 'dev' in tgt:
             oracle_fname = '../data/processed/dev.oracle.en'
@@ -222,14 +271,14 @@ class Translator(object):
                 oracle_f.write(arc + '\n')
             oracle_f.write('\n')
             cnt += 1
-            if cnt > 5000:
+            if cnt == num:
                 break
         tagged_file.close()
         oracle_f.close()
         plain_f.close()
         return txt_fname, oracle_fname
 
-    def conll_to_deprels(self, src):
+    def conll_to_deprels(self, src, num):
         cnt = 0
         if 'dev' in src:
             deprels_fname = '../data/processed/dev.deprel.kr'
@@ -269,7 +318,7 @@ class Translator(object):
                     plain_f.write(token)
             plain_f.write('\n')
             cnt += 1
-            if cnt > 5000:
+            if cnt == num:
                 break
         pickle.dump(deprels, deprels_f)
         tagged_file.close()
@@ -284,19 +333,22 @@ class Translator(object):
              hiddenEncDim,
              hiddenActDim,
              scale,
-             clipThreshold,
              beamSize,
-             maxLen,
              miniBatchSize,
-             threadNum,
              learningRate,
-             saveDirName,
-             loadModelName,
-             loadGradName,
+             loadModel,
+             modelDir,
+             modelName,
              startIter,
              epochs,
              useGCN,
              gcnDim):
+        try:
+            os.makedirs(modelDir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        self.modelPath = modelDir + modelName
         self.miniBatchSize = miniBatchSize
         self.model = NMT_RNNG(self.sourceVoc,
                               self.targetVoc,
@@ -310,19 +362,13 @@ class Translator(object):
                               hiddenDim,
                               hiddenActDim,
                               scale,
-                              clipThreshold,
-                              beamSize,
-                              maxLen,
                               self.miniBatchSize,
-                              threadNum,
                               learningRate,
                               False,
-                              0,
-                              saveDirName,
                               useGCN,
                               gcnDim)
-
-        translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
+        if loadModel:
+            self.model.load_state_dict(torch.load(self.modelPath))
         optimizer = optim.Adam(self.model.parameters(), lr=learningRate, weight_decay=0.005, amsgrad=True)
         criterion = nn.CrossEntropyLoss()
         NLL = nn.NLLLoss()
@@ -334,6 +380,35 @@ class Translator(object):
         print("Dependency Label voc size: " + str(len(self.deprelVoc.tokenList)))
 
         for i in range(epochs):
-            print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
-            status = self.train(criterion, NLL, optimizer)
+            print("Epoch " + str(i+startIter) + ' (lr = ' + str(self.model.learningRate) + ')')
+            self.train(criterion, NLL, optimizer)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
