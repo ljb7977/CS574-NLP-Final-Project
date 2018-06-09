@@ -209,7 +209,7 @@ class NMT_RNNG(nn.Module):
         act_c1 = torch.rand(1, 1, self.hiddenActDim)
 
         self.outBuf = [(torch.rand(1, self.hiddenDim), torch.rand(1, self.hiddenDim))]  # 혹은 zero
-        print(len(self.targetEmbed), len(self.outBuf))
+        # print(len(self.targetEmbed), len(self.outBuf))
         h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
 
@@ -376,7 +376,7 @@ class NMT_RNNG(nn.Module):
         dec_h1 = F.relu(self.decInitAffine(enc_h1)).view(1, -1)
         dec_c1 = torch.rand(self.hiddenDim).view(1, -1)
 
-        for i in range(100):  # maxlen
+        for i in range(10):  # maxlen
             dec_h1, dec_c1 = self.decoder(s_tilde, dec_h1, dec_c1)  # decoder forward 1 step with stilde
             context_vec = self.calcContextVec(dec_h1, enc_output)
             s_tilde = self.decoderAttention(dec_h1, context_vec)
