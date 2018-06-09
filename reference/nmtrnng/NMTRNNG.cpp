@@ -2380,7 +2380,7 @@ void NMTRNNG::demo(const std::string &srcTrain,
         std::cout << "** Greedy Search" << std::endl;
         nmtRNNG.translate(test, argsTmp[0], translation[0], true);
         std::cout << "** Beam Search" << std::endl;
-        nmtRNNG.translate(test, args[1], translation[1], true);
+        nmtRNNG.translate(test, argsTmp[1], translation[1], true);
     }
 }
 

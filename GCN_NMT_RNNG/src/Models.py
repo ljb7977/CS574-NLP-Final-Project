@@ -141,8 +141,6 @@ class NMT_RNNG(nn.Module):
         enc_output = output.view(-1, self.hiddenEncDim*2)
         # print(enc_output.shape)
 
-
-        # 이 디코더의 output을 action sLSTM과 decoder LSTM에 넣어야 한다.
         j, k, top = 0, 0, 0
         self.headStack.push(k)
         k += 1
@@ -222,7 +220,6 @@ class NMT_RNNG(nn.Module):
             k+=1
 
         uts = self.actionPredAffine(torch.stack(uts))
-        print(s_tildes[0])
         s_tildes = self.wordPredAffine(torch.stack(s_tildes))
         return uts, s_tildes
 
@@ -344,88 +341,30 @@ class NMT_RNNG(nn.Module):
         self.embedStack.push(phraseNum)
         return
 
-    # def calcLoss(self, data, train):
-    #     loss = 0.0
-    #     lossAct = 0.0
-    #     j=0, k=0
-    #     phraseNum = data.tgt.size()
-    #     actNum = None
-    #
-    #     self.del_embedVec = {}
-    #     self.headStack = []
-    #     self.headList = {}
-    #     self.embedStack = []
-    #     self.embedList = {}
-    #     # this->biEncode(data, arg, false)
-    #
-    #     # k == 0
-    #     # self.outBufInitAffine.forward(arg.encStateEnd, arg.outBufState[k]->h);
-    #     arg.outBufState[k].c = torch.zeros(self.hiddenDim)
-    #
-    #     arg.headStack.append(k)
-    #     k+=1
-    #
-    #     for i in range(arg.actLen): #SoftmaxAct calculation
-    #         actNum = data.action[i]
-    #         self.decoderAction(arg, arg.actState, data.action[i - 1], i, False) # PUSH
-    #         if self.actionVoc.tokenList[actNum].action == 0: # 0: Shift
-    #             arg.headStack.append(k)
-    #             #1) Let a decoder proceed one step; PUSH
-    #             self.decoder(arg, arg.decState, arg.s_tilde[j - 1], data.tgt[j - 1], j, False)
-    #
-    #             # Attention
-    #             self.decoderAttention(arg, arg.decState[j], arg.contextSeqList[j], arg.s_tilde[j], arg.stildeEnd[j])
-    #             if not self.useBlackOut:
-    #                 self.softmax.calcDist(arg.s_tilde[j], arg.targetDist)
-    #                 loss += self.softmax.calcLoss(arg.targetDist, data.tgt[j])
-    #             else:
-    #                 if train: #word prediction
-    #                     arg.blackOutState[0].sample[0] = data.tgt[j];
-    #                     arg.blackOutState[0].weight.col(0) = self.blackOut.weight.col(data.tgt[j])
-    #                     arg.blackOutState[0].bias.coeffRef(0, 0) = self.blackOut.bias.coeff(data.tgt[j], 0)
-    #
-    #                     self.blackOut.calcSampledDist2(arg.s_tilde[j], arg.targetDist, arg.blackOutState[0])
-    #                     loss += self.blackOut.calcSampledLoss(arg.targetDist) #Softmax
-    #                 else: # Test Time
-    #                     self.blackOut.calcDist(arg.s_tilde[j], arg.targetDist) #Softmax
-    #                     loss += self.blackOut.calcLoss(arg.targetDist, data.tgt[j]) #Softmax
-    #             # 2) Let the output buffer proceed one step, though the computed unit is not used at this step; PUSH
-    #             self.outBuf.forward(self.targetEmbed.col(data.tgt[j]),
-    #                                 arg.outBufState[k - 1], arg.outBufState[k])
-    #
-    #             arg.embedStack.append(j)
-    #
-    #             # SoftmaxAct calculation(o: output buffer, s: stack, and h: action)
-    #             arg.utEnd[0].segment(0, self.hiddenDim) = arg.decState[j].h
-    #             j+=1
-    #         elif self.actionVoc.tokenList[actNum].action == 1: # 1: Reduce - Left
-    #             self.decoderReduceLeft(data, arg, phraseNum, i - 1, k, False)
-    #             phraseNum+=1
-    #
-    #             # SoftmaxAct calculation(o: output buffer, s: stack, and h: action)
-    #             arg.utEnd[0].segment(0, self.hiddenDim) = arg.decState[j - 1].h;
-    #
-    #         elif self.actionVoc.tokenList[actNum].action == 2: # 2: Reduce - Right
-    #             self.decoderReduceRight(data, arg, phraseNum, i - 1, k, False)
-    #             phraseNum+=1
-    #
-    #             # SoftmaxAct calculation(o: output buffer, s: stack, and h: action)
-    #             arg.utEnd[0].segment(0, this->hiddenDim) = arg.decState[j - 1].h
-    #
-    #         else:
-    #             raise("Error Non-Shift/Reduce")
-    #
-    #         arg.utEnd[0].segment(self.hiddenDim, self.hiddenDim) = arg.outBufState[k - 1].h
-    #         arg.utEnd[0].segment(self.hiddenDim * 2, self.hiddenActDim) = arg.actState[i].h
-    #         self.utAffine.forward(arg.utEnd[0], arg.ut[0])
-    #
-    #         self.softmaxAct.calcDist(arg.ut[0], arg.actionDist)
-    #         lossAct += self.softmaxAct.calcLoss(arg.actionDist, data.action[i])
-    #
-    #         k+=1
-    #
-    #     arg.clear()
-    #     return [loss, lossAct]
+    def translate(self, src):
+        s_tildes = []
+        self.sourceEmbed = self.srcEmbedding(src)
+        enc_h0, enc_c0 = torch.zeros(2, 1, self.hiddenEncDim), torch.zeros(2, 1, self.hiddenEncDim)
+        output, (enc_h1, enc_c1) = self.encode(self.sourceEmbed, (enc_h0, enc_c0))
+        enc_output = output.view(-1, self.hiddenEncDim * 2)
+
+        j, k, top = 0, 0, 0
+        k += 1
+
+        # i == 0
+
+        s_tilde = enc_h1.view(1, self.hiddenEncDim * 2)
+        dec_h1 = F.relu(self.decInitAffine(enc_h1)).view(1, -1)
+        dec_c1 = torch.rand(self.hiddenDim).view(1, -1)
+
+        for i in range(100): #maxlen
+            dec_h1, dec_c1 = self.decoder(s_tilde, dec_h1, dec_c1)  #decoder forward 1 step with stilde
+            context_vec = self.calcContextVec(dec_h1, enc_output)
+            s_tilde = self.decoderAttention(dec_h1, context_vec)
+            s_tildes.append(s_tilde)
+
+        s_tildes = self.wordPredAffine(torch.stack(s_tildes))
+        return s_tildes
 
 class Stack():
     def __init__(self):

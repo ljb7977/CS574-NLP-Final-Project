@@ -65,14 +65,8 @@ class Translator(object):
                 loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
 
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
+                print(predicted_words[0])
 
-                # for i in range(len(train_tgt)):
-                #     try:
-                #         topv, topi = predicted_words[i].topk(1)
-                #         print(self.targetVoc.tokenList[topi][0], end=" ")
-                #         loss += -(predicted_words[i][train_tgt[i]])
-                #     except:
-                #         break
                 for i in range(list(predicted_words.shape)[0]):
                     topv, topi = predicted_words[i].topk(1)
                     print(self.targetVoc.tokenList[topi][0], end=" ")
@@ -84,7 +78,6 @@ class Translator(object):
             loss.backward(retain_graph=True)
             optimizer.step()
             print("loss: ", round(loss.item(), 2))
-            # print("act_loss:", round(float(act_loss), 2))
         return
 
     def loadCorpus(self, src, tgt, act, data):
@@ -167,7 +160,7 @@ class Translator(object):
                               saveDirName)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
-        optimizer = optim.SGD(self.model.parameters(), lr=learningRate)
+        optimizer = optim.Adam(self.model.parameters(), lr=learningRate)
         criterion = nn.CrossEntropyLoss()
         NLL = nn.NLLLoss()
         print("# of Training Data:\t" + str(len(self.trainData)))
