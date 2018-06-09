@@ -333,7 +333,6 @@ class Translator(object):
              hiddenEncDim,
              hiddenActDim,
              scale,
-             beamSize,
              miniBatchSize,
              learningRate,
              loadModel,
