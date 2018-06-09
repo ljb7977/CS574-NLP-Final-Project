@@ -30,29 +30,34 @@ class Translator(object):
                  srcVocaThreshold,
                  tgtVocaThreshold,
                  deprelLabelThreshold,
-                 printEvery):
+                 printEvery,
+                 trainSize,
+                 testSize,
+                 devSize):
         if prepocessed:
             tgtTrain = './data/processed/train.en'
             actTrain = './data/processed/train.oracle.en'
             tgtDev = './data/processed/dev.en'
             actDev = './data/processed/dev.oracle.en'
-            #tgtTest = './data/processed/test.en'
-            #actTest = './data/processed/test.oracle.en'
+            tgtTest = './data/processed/test.en'
+            actTest = './data/processed/test.oracle.en'
             srcTrain = './data/processed/train.kr'
             deprelTrain = './data/processed/train.deprel.kr'
             srcDev = './data/processed/dev.kr'
             deprelDev = './data/processed/dev.deprel.kr'
-            #srcTest = './data/processed/test.kr'
-            #deprelTest = './data/processed/test.deprel.kr'
+            srcTest = './data/processed/test.kr'
+            deprelTest = './data/processed/test.deprel.kr'
         else:
-            devNum = 500
-            trainNum = 5000
+            train_permutation = list(range(0, 100000))
+            random.shuffle(train_permutation)
+            dev_permutation = list(range(0, 10001))
+            random.shuffle(dev_permutation)
             print('Parsing target file into plain sentences & actions...')
-            tgtTrain, actTrain = self.conll_to_action('./data/tagged_train.en', trainNum)
-            tgtDev, actDev = self.conll_to_action('./data/tagged_dev.en', devNum)
+            tgtTrain, actTrain = self.conll_to_action('./data/tagged_train.en', trainSize, train_permutation)
+            tgtDev, actDev = self.conll_to_action('./data/tagged_dev.en', devSize, dev_permutation)
             print('Parsing source file into plain sentences & dependency relations...')
-            srcTrain, deprelTrain = self.conll_to_deprels('./data/tagged_train.kr', trainNum)
-            srcDev, deprelDev = self.conll_to_deprels('./data/tagged_dev.kr', devNum)
+            srcTrain, deprelTrain = self.conll_to_deprels('./data/tagged_train.kr', trainSize, train_permutation)
+            srcDev, deprelDev = self.conll_to_deprels('./data/tagged_dev.kr', devSize, dev_permutation)
 
         print('Loading processed data...')
         self.sourceVoc = Vocabulary(srcTrain, srcVocaThreshold, 'lang')
@@ -228,7 +233,7 @@ class Translator(object):
             idx += 1
         return data
 
-    def conll_to_action(self, tgt, num_):
+    def conll_to_action(self, tgt, num_, permutation):
         cnt = 0
         if 'dev' in tgt:
             oracle_fname = './data/processed/dev.oracle.en'
@@ -248,7 +253,8 @@ class Translator(object):
         bulk = tagged_file.read()
         blocks = re.compile(r"\n{2,}").split(bulk)
         blocks = list(filter(None, blocks))
-        for block in blocks:
+        for i in permutation:
+            block = blocks[i]
             tokens = []
             buffer = []
             child_to_head_dict = {}
@@ -283,7 +289,7 @@ class Translator(object):
         plain_f.close()
         return txt_fname, oracle_fname
 
-    def conll_to_deprels(self, src, num_):
+    def conll_to_deprels(self, src, num_, permutation):
         cnt = 0
         if 'dev' in src:
             deprels_fname = './data/processed/dev.deprel.kr'
@@ -304,7 +310,8 @@ class Translator(object):
         blocks = re.compile(r"\n{2,}").split(bulk)
         blocks = list(filter(None, blocks))
         deprels = []
-        for block in blocks:
+        for i in permutation:
+            block = blocks[i]
             deprel = []
             tokens = []
             for line in block.splitlines():
