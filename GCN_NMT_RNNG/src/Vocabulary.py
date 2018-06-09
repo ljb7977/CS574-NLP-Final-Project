@@ -21,7 +21,7 @@ class Vocabulary(object):
             for line in f:
                 eosCount += 1
                 tokens = re.split('[ \t\n]', line)
-                tokens = [x for x in tokens if x != '']
+                tokens = [x for x in tokens if x != '' and x != '.' and x != '?']
                 for token in tokens:
                     if token in tokenCount:
                         tokenCount[token] += 1
@@ -37,9 +37,9 @@ class Vocabulary(object):
         tokenList_len = len(self.tokenList)
         for i in range(tokenList_len):
             self.tokenIndex[self.tokenList[i][0]] = i
-        self.eosIndex = tokenList_len
-        self.tokenList.append(("*EOS*", eosCount))
-        self.unkIndex = self.eosIndex + 1
+        # self.eosIndex = tokenList_len
+        # self.tokenList.append(("*EOS*", eosCount))
+        self.unkIndex = tokenList_len
         self.tokenList.append(("*UNK*", unkCount))
 
     def initAction(self, trainFile):

@@ -86,9 +86,6 @@ class Translator(object):
             for data_in_batch in batch_trainData:
                 index += 1
 
-                data_in_batch.src.pop()
-                data_in_batch.tgt.pop()
-
                 train_src = torch.LongTensor(data_in_batch.src)
                 train_tgt = torch.LongTensor(data_in_batch.tgt)
                 train_action = torch.LongTensor(data_in_batch.action)
@@ -130,6 +127,12 @@ class Translator(object):
 
                 # Backward(Action)
                 loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
+            # dot = make_dot(uts, params=dict(self.model.named_parameters()))
+            # with open("uts.dot", "w") as f:
+            #     f.write(str(dot))
+            # dot = make_dot(s_tildes)
+            # with open("stildes.dot", "w") as f:
+            #     f.write(str(dot))
             loss_val = round(loss.item(), 2)/len(batch_trainData)
             print("loss: ", loss_val)
             print("processing backward() and optimizer.step()...")
@@ -177,24 +180,24 @@ class Translator(object):
             for line in f:
                 data.append(Data())
                 tokens = re.split('[ \t\n]', line)
-                tokens = [x for x in tokens if x != '']
+                tokens = [x for x in tokens if x != '' and x != '?' and x != '.']
                 for token in tokens:
                     if token in self.sourceVoc.tokenIndex:
                         data[-1].src.append(self.sourceVoc.tokenIndex[token])
                     else:
                         data[-1].src.append(self.sourceVoc.unkIndex)
-                data[-1].src.append(self.sourceVoc.eosIndex)
+                # data[-1].src.append(self.sourceVoc.eosIndex)
         idx = 0
         with open(tgt, encoding="utf-8") as f:
             for line in f:
                 tokens = re.split('[ \t\n]', line)
-                tokens = [x for x in tokens if x != '']
+                tokens = [x for x in tokens if x != '' and x != '?' and x != '.']
                 for token in tokens:
                     if token in self.targetVoc.tokenIndex:
                         data[idx].tgt.append(self.targetVoc.tokenIndex[token])
                     else:
                         data[idx].tgt.append(self.targetVoc.unkIndex)
-                data[idx].tgt.append(self.targetVoc.eosIndex)
+                # data[idx].tgt.append(self.targetVoc.eosIndex)
                 idx += 1
         idx = 0
         with open(act) as f:
@@ -251,6 +254,8 @@ class Translator(object):
             child_to_head_dict = {}
             for line in block.splitlines():
                 attr_list = line.split('\t')
+                if attr_list[1] == '.' or attr_list[1] == '?':
+                    continue
                 tokens.append(attr_list[1])
                 num = int(attr_list[0])
                 head = int(attr_list[6])
