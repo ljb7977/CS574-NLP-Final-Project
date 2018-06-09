@@ -4,8 +4,6 @@ import torch.nn.functional as F
 from torch.nn import init
 import utils
 from torch.autograd import Variable
-# import networkx as nx
-# import scipy.sparse as sparse
 
 
 class NMT_RNNG(nn.Module):
@@ -31,7 +29,8 @@ class NMT_RNNG(nn.Module):
                  isTest,
                  startIter,
                  saveDirName,
-                 useGCN):
+                 useGCN,
+                 gcnDim):
         super(NMT_RNNG, self).__init__()
         self.sourceVoc = sourceVoc
         self.targetVoc = targetVoc
@@ -54,6 +53,8 @@ class NMT_RNNG(nn.Module):
         self.isTest = isTest
         self.startIter = startIter
         self.saveDirName = saveDirName
+        self.useGCN = useGCN
+        self.gcnDim = gcnDim
 
         # TODO init
         self.stack = Stack()
@@ -76,39 +77,57 @@ class NMT_RNNG(nn.Module):
                            dropout=0.3)
         utils.lstm_init_uniform_weights(self.enc, self.scale)
         utils.set_forget_bias(self.enc, 1.0)
+
+        ################################################################
         '''
-        # GCN layer
+        GCN
+        '''
         if useGCN:
-            graph = nx.DiGraph()  # graph for adjacency
-            graph_lab = nx.DiGraph()    # graph ofr labels
-            graph.add_nodes_from(range(self.maxLen))
-            graph_lab.add_nodes_from(range(self.maxLen))
-            edges = []
-            for (labelIdx, head, dest) in self.deprelVoc.dirList:
-                edges.append((head, dest, {'deprel': str(labelIdx)}))
-            graph.add_edges_from(edges)
-
-            # get adjacency matrix from the graph
-            graph_lab.add_edges_from(edges)
-            adj = nx.adjacency_matrix(graph)
-            labels = nx.adjacency_matrix(graph_lab, weight='deprel')
-
-            # incoming edges become outgoing edges (i->j), dep to head
-            adj_inv = nx.adjacency_matrix(graph.reverse())
-            labels_inv = nx.adjacency_matrix(graph_lab.reverse(), weight='deprel')
-
-            # conversion to SparseTensor format (tuples of coords, values, shape)
-            adj = utils.sparse_to_tuple(adj)
-            adj_inv = utils.sparse_to_tuple(adj_inv)
-            labels = utils.sparse_to_tuple(labels)
-            labels_inv = utils.sparse_to_tuple(labels_inv)
-
-            print(adj)
-
             self.num_labels = len(self.deprelVoc.tokenList)
-            #self.conv1 = nn.Conv1d(self.hiddenEncDim*2, self.maxLen,)
-            #self.w = Variable(torch.Tensor(self.))
-        '''
+
+            self.W_in = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
+            nn.init.xavier_normal(self.W_in)
+
+            self.b_in_list = []
+            for i in range(self.num_labels):
+                b_in = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+                nn.init.constant(b_in, 0)
+                self.b_in_list.append(b_in)
+
+            self.W_in_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+            nn.init.uniform(self.W_in_gate)
+
+            self.b_in_gate_list = []
+            for i in range(self.num_labels):
+                b_in_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+                nn.init.constant(b_in_gate, 1)
+                self.b_in_gate_list.append(b_in_gate)
+
+            self.W_out = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
+            nn.init.xavier_normal(self.W_out)
+
+            self.b_out_list = []
+            for i in range(self.num_labels):
+                b_out = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+                nn.init.constant(b_out, 0)
+                self.b_out_list.append(b_out)
+
+            self.W_out_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+            nn.init.uniform(self.W_out_gate)
+
+            self.b_out_gate_list = []
+            for i in range(self.num_labels):
+                b_out_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+                nn.init.constant(b_out_gate, 1)
+                self.b_out_gate_list.append(b_out_gate)
+
+            self.W_self_loop = Variable(torch.FloatTensor(self.inputDim, self.gcnDim), requires_grad=True)
+            nn.init.xavier_normal(self.W_self_loop)
+
+            self.W_self_loop_gate = Variable(torch.FloatTensor(1, self.gcnDim), requires_grad=True)
+            nn.init.uniform(self.W_self_loop_gate)
+        ################################################################
+
         # decoder
         self.dec = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
         self.dec.bias_ih.data = torch.ones(4 * self.hiddenDim)
@@ -163,15 +182,37 @@ class NMT_RNNG(nn.Module):
         return (Variable(weight.new(2, 1, self.hiddenEncDim).zero_()),
                 Variable(weight.new(2, 1, self.hiddenEncDim).zero_()))
 
-    def forward(self, src, tgt, actions, src_length, enc_hidden, train=True):
+    def forward(self, src, tgt, actions, deprels, src_length, enc_hidden, train=True):
+        deprel_dict = {}
+        for (labelIdx, head, num) in deprels:
+            deprel_dict[str((head, num))] = labelIdx
         uts = []
         s_tildes = []
         self.actionEmbed = self.actEmbedding(actions)
         self.targetEmbed = self.tgtEmbedding(tgt)
         self.sourceEmbed = self.srcEmbedding(src)
+
+        if self.useGCN:
+            wordEmbeds = torch.chunk(self.sourceEmbed, src_length)
+            rows = []
+            for i, wordembed in enumerate(wordEmbeds):
+                # print(wordembed.shape)  # (1, inputDim)
+                row = torch.mm(wordembed, self.W_self_loop) * self.W_self_loop_gate
+                for j in range(src_length):
+                    ijstr = str((i+1, j+1))
+                    jistr = str((j+1, i+1))
+                    if ijstr in deprel_dict:
+                        labelIdx = deprel_dict[ijstr]   # i->j labelIdx, out 관련 계산
+                        row += (torch.mm(wordembed, self.W_out) + self.b_out_list[labelIdx]) * self.W_out_gate + self.b_out_gate_list[labelIdx]
+                    elif jistr in deprel_dict:
+                        labelIdx = deprel_dict[jistr]   # i<-j labelIdx, in 관련 계산
+                        row += (torch.mm(wordembed, self.W_in) + self.b_in_list[labelIdx]) * self.W_in_gate + self.b_in_gate_list[labelIdx]
+                rows.append(row)
+            self.sourceEmbed = torch.cat(rows, 0)
+
         output, (enc_h1, enc_c1) = self.encode(self.sourceEmbed, enc_hidden)
         enc_output = output.view(-1, self.hiddenEncDim * 2)
-
+        # print(enc_output.shape) #(senLen, 2*hiddenEncDim)
         j, k, top = 0, 0, 0
         self.headStack.push(k)
         k += 1

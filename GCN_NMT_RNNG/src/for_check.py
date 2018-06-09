@@ -7,7 +7,8 @@ t = Translator.Translator(srcTrain_tagged='../data/tagged_train.kr',
                           srcVocaThreshold=1,
                           tgtVocaThreshold=1,
                           deprelLabelThreshold=1)
-t.demo(inputDim=256,
+
+t.demo(inputDim=512,
        inputActDim=128,
        hiddenDim=256,
        hiddenEncDim=256,
@@ -17,6 +18,16 @@ t.demo(inputDim=256,
        beamSize=10,
        maxLen=80,
        miniBatchSize=128,
+# =======
+#        hiddenDim=512,
+#        hiddenEncDim=512,
+#        hiddenActDim=128,
+#        scale=0.5,
+#        clipThreshold=10,
+#        beamSize=10,
+#        maxLen=80,
+#        miniBatchSize=1025,
+# >>>>>>> 5dfd9778946e3f8252fd728068237860e6cceee1
        threadNum=5,
        learningRate=0.001,
        saveDirName='../save/',
@@ -24,7 +35,8 @@ t.demo(inputDim=256,
        loadGradName='',
        startIter=5,
        epochs=10,
-       useGCN=True)
+       useGCN=True,
+       gcnDim=512)
 
 
 

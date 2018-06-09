@@ -75,15 +75,17 @@ class Translator(object):
                 train_src = torch.LongTensor(data_in_batch.src)
                 train_tgt = torch.LongTensor(data_in_batch.tgt)
                 train_action = torch.LongTensor(data_in_batch.action)
+                train_deprel = data_in_batch.deprel
 
                 src_length = len(data_in_batch.src)
                 enc_hidden = self.model.enc_init_hidden()
-                uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden)
+                uts, s_tildes = self.model(train_src, train_tgt, train_action, train_deprel, src_length, enc_hidden)
 
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
                 torch.set_printoptions(threshold=10000)
                 # print(predicted_words[0])
                 print("in batch "+str(batch_i)+", "+str(index)+"th data")
+
                 print("source: ", end="")
                 for i in data_in_batch.src:
                     print(self.sourceVoc.tokenList[i][0], end=" ")
@@ -293,7 +295,8 @@ class Translator(object):
              loadGradName,
              startIter,
              epochs,
-             useGCN):
+             useGCN,
+             gcnDim):
         self.miniBatchSize = miniBatchSize
         self.model = NMT_RNNG(self.sourceVoc,
                               self.targetVoc,
@@ -316,7 +319,8 @@ class Translator(object):
                               False,
                               0,
                               saveDirName,
-                              useGCN)
+                              useGCN,
+                              gcnDim)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
         optimizer = optim.Adam(self.model.parameters(), lr=learningRate, weight_decay=0.005, amsgrad=True)
@@ -332,28 +336,4 @@ class Translator(object):
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
             status = self.train(criterion, NLL, optimizer)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
