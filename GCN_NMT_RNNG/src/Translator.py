@@ -10,7 +10,7 @@ import math
 import utils
 import pickle
 
-#from torchviz import make_dot, make_dot_from_trace
+from torchviz import make_dot, make_dot_from_trace
 
 class Data(object):
     def __init__(self):
@@ -30,6 +30,7 @@ class Translator(object):
                  srcVocaThreshold,
                  tgtVocaThreshold,
                  deprelLabelThreshold):
+        #train_size = 20000
         print('Parsing target file into plain sentences & actions...')
         tgtTrain, actTrain = self.conll_to_action(tgtTrain_tagged)
         tgtDev, actDev = self.conll_to_action(tgtDev_tagged)
@@ -47,14 +48,12 @@ class Translator(object):
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, deprelDev, self.devData)
 
     def train(self, criterion, NLL, optimizer, train=True):
-        for idx in self.trainData[0].src:
-            print(self.sourceVoc.tokenList[idx][0], end=" ")
         permutation = list(range(0, len(self.trainData)))
         random.shuffle(permutation)
         batchNumber = int(math.ceil(len(self.trainData) / self.miniBatchSize))
-        for i in range(1, batchNumber + 1):
-            print('Progress: ' + str(i) + '/' + str(batchNumber) + ' mini batches')
-            startIdx = (i - 1) * self.miniBatchSize
+        for batch_i in range(1, batchNumber + 1):
+            print('Progress: ' + str(batch_i) + '/' + str(batchNumber) + ' mini batches')
+            startIdx = (batch_i - 1) * self.miniBatchSize
             endIdx = startIdx + self.miniBatchSize
             if endIdx > len(self.trainData):
                 endIdx = len(self.trainData)
@@ -62,21 +61,29 @@ class Translator(object):
             batch_trainData = [self.trainData[i] for i in indices]
 
             loss = 0
-            # act_loss = 0
             optimizer.zero_grad()
+            index = 0
             for data_in_batch in batch_trainData:
+                index += 1
+
+                data_in_batch.src.pop()
+                data_in_batch.tgt.pop()
+                #remove eos
+
+                # print(self.targetVoc.tokenList[data_in_batch.tgt[-1]][0])
+
                 train_src = torch.LongTensor(data_in_batch.src)
                 train_tgt = torch.LongTensor(data_in_batch.tgt)
                 train_action = torch.LongTensor(data_in_batch.action)
 
                 src_length = len(data_in_batch.src)
                 enc_hidden = self.model.enc_init_hidden()
-                uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden, criterion)
+                uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden)
 
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
                 torch.set_printoptions(threshold=10000)
-                print(predicted_words[0])
-
+                # print(predicted_words[0])
+                print("in batch "+str(batch_i)+", "+str(index)+"th data")
                 print("source: ", end="")
                 for i in data_in_batch.src:
                     print(self.sourceVoc.tokenList[i][0], end=" ")
@@ -87,23 +94,31 @@ class Translator(object):
                 for i in range(list(predicted_words.shape)[0]):
                     topv, topi = predicted_words[i].topk(1)
                     print(self.targetVoc.tokenList[topi][0], end=" ")
-                print("")
+                print("\n")
 
                 loss_t = 0
+                word_cnt = 0
                 for i in range(min(list(predicted_words.shape)[0], len(train_tgt))):
+                    topv, topi = predicted_words[i].topk(1)
+                    if self.targetVoc.tokenList[topi][0] == '.':
+                        continue
                     loss_t += NLL(predicted_words[i].view(1, -1), torch.LongTensor([train_tgt[i]]))
-                loss = loss_t / min(list(predicted_words.shape)[0], len(train_tgt))
+                    word_cnt+=1
+                if word_cnt != 0:
+                    loss += loss_t / word_cnt
 
                 # Backward(Action)
                 loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
-
-            # act_loss.backward(retain_graph=True)
-            # print(dict(self.model.named_parameters()))
-            # make_dot(s_tildes, params=dict(self.model.named_parameters()))
-            # loss.backward(retain_graph=True)
+            # dot = make_dot(uts, params=dict(self.model.named_parameters()))
+            # with open("uts.dot", "w") as f:
+            #     f.write(str(dot))
+            # dot = make_dot(s_tildes, params=dict(self.model.named_parameters()))
+            # with open("stildes.dot", "w") as f:
+            #     f.write(str(dot))
+            print("loss: ", round(loss.item(), 2))
             loss.backward()
             optimizer.step()
-            print("loss: ", round(loss.item(), 2))
+
         return
 
     def loadCorpus(self, src, tgt, act, deprel, data):
@@ -160,6 +175,7 @@ class Translator(object):
         return data
 
     def conll_to_action(self, tgt):
+        cnt = 0
         if 'dev' in tgt:
             oracle_fname = '../data/processed/dev.oracle.en'
             txt_fname = '../data/processed/dev.en'
@@ -203,12 +219,16 @@ class Translator(object):
             for arc in arcs:
                 oracle_f.write(arc + '\n')
             oracle_f.write('\n')
+            cnt += 1
+            if cnt > 5000:
+                break
         tagged_file.close()
         oracle_f.close()
         plain_f.close()
         return txt_fname, oracle_fname
 
     def conll_to_deprels(self, src):
+        cnt = 0
         if 'dev' in src:
             deprels_fname = '../data/processed/dev.deprel.kr'
             txt_fname = '../data/processed/dev.kr'
@@ -246,6 +266,9 @@ class Translator(object):
                     plain_f.write(' ')
                     plain_f.write(token)
             plain_f.write('\n')
+            cnt += 1
+            if cnt > 5000:
+                break
         pickle.dump(deprels, deprels_f)
         tagged_file.close()
         deprels_f.close()
@@ -280,8 +303,8 @@ class Translator(object):
                               self.devData,
                               inputDim,
                               inputActDim,
-                              hiddenDim,
                               hiddenEncDim,
+                              hiddenDim,
                               hiddenActDim,
                               scale,
                               clipThreshold,

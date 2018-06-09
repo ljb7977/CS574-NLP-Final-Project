@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.nn import init
 import utils
 from torch.autograd import Variable
-import networkx as nx
-import scipy.sparse as sparse
+# import networkx as nx
+# import scipy.sparse as sparse
 
 
 class NMT_RNNG(nn.Module):
@@ -72,7 +72,8 @@ class NMT_RNNG(nn.Module):
         self.tgtEmbedding = nn.Embedding(len(self.targetVoc.tokenList), self.inputDim)
 
         # encoder
-        self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True)
+        self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True,
+                           dropout=0.3)
         utils.lstm_init_uniform_weights(self.enc, self.scale)
         utils.set_forget_bias(self.enc, 1.0)
         '''
@@ -110,6 +111,8 @@ class NMT_RNNG(nn.Module):
         '''
         # decoder
         self.dec = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
+        self.dec.bias_ih.data = torch.ones(4 * self.hiddenDim)
+        self.dec.bias_hh.data = torch.ones(4 * self.hiddenDim)
         # utils.lstm_init_uniform_weights(self.dec, self.scale)
         # utils.set_forget_bias(self.enc, 1.0)
 
@@ -119,6 +122,8 @@ class NMT_RNNG(nn.Module):
         utils.set_forget_bias(self.act, 1.0)
 
         self.outBufCell = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
+        self.outBufCell.bias_ih.data = torch.ones(4 * self.hiddenDim)
+        self.outBufCell.bias_hh.data = torch.ones(4 * self.hiddenDim)
 
         # out buffer, RNNG stack
         # self.outBuf = StackLSTM(input_size=self.inputDim, hidden_size=self.hiddenDim)
@@ -164,10 +169,8 @@ class NMT_RNNG(nn.Module):
         self.actionEmbed = self.actEmbedding(actions)
         self.targetEmbed = self.tgtEmbedding(tgt)
         self.sourceEmbed = self.srcEmbedding(src)
-        # print(self.sourceEmbed.shape)
         output, (enc_h1, enc_c1) = self.encode(self.sourceEmbed, enc_hidden)
         enc_output = output.view(-1, self.hiddenEncDim * 2)
-        # print(enc_output.shape)
 
         j, k, top = 0, 0, 0
         self.headStack.push(k)
@@ -186,7 +189,6 @@ class NMT_RNNG(nn.Module):
         act_c1 = torch.rand(1, 1, self.hiddenActDim)
 
         self.outBuf = [(torch.rand(1, self.hiddenDim), torch.rand(1, self.hiddenDim))]  # 혹은 zero
-        # outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
 
@@ -209,12 +211,13 @@ class NMT_RNNG(nn.Module):
                 context_vec = self.calcContextVec(dec_h1, enc_output)
                 s_tilde = self.decoderAttention(dec_h1, context_vec)
 
-                # if(j - 1 < len(self.targetEmbed)):
+                if(j < len(self.targetEmbed)):
                 #print(j, k, len(self.targetEmbed))
-                h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
-                self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
-                # else:
-                #     self.outBuf.push(torch.zeros(self.hiddenDim))
+                    h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
+                    self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
+                else:
+                    h1, c1 = self.outBufCell(torch.zeros(1, self.hiddenDim), self.outBuf[k - 1])
+                    self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
                 self.embedStack.push(j)
                 s_tildes.append(s_tilde)
                 j += 1
@@ -397,91 +400,3 @@ class Stack():
 
     def push(self, item):
         self.stack.append(item)
-
-
-class StackLSTM(nn.Module):
-    class EmptyStackError(Exception):
-        def __init__(self):
-            super().__init__('stack is already empty')
-
-    BATCH_SIZE = 1
-    SEQ_LEN = 1
-
-    # Constructor
-    # Inheriting torch.nn.Module
-    # make sLSTM using pytorch LSTM
-    def __init__(self,
-                 input_size: int,
-                 hidden_size: int,
-                 num_layers: int = 1,
-                 dropout: float = 0.,
-                 bidirectional: bool = False):
-        if input_size <= 0:
-            raise ValueError(f'nonpositive input size: {input_size}')
-        if hidden_size <= 0:
-            raise ValueError(f'nonpositive hidden size: {hidden_size}')
-        if num_layers <= 0:
-            raise ValueError(f'nonpositive number of layers: {num_layers}')
-        if dropout < 0. or dropout >= 1.:
-            raise ValueError(f'invalid dropout rate: {dropout}')
-
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.dropout = dropout
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, dropout=dropout,
-                            bidirectional=bidirectional)
-        self.h0 = nn.Parameter(torch.Tensor(num_layers, self.BATCH_SIZE, hidden_size))
-        self.c0 = nn.Parameter(torch.Tensor(num_layers, self.BATCH_SIZE, hidden_size))
-        # 초기값을 random이 아니라 affine으로 잡아야 할것같다.
-        init_states = (self.h0, self.c0)
-        self._states_hist = [init_states]
-        # self._outputs_hist = []  # type: List[Variable]
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        for name, param in self.lstm.named_parameters():
-            if name.startswith('weight'):
-                init.orthogonal(param)
-            else:
-                assert name.startswith('bias')
-                init.constant(param, 0.)
-        init.constant(self.h0, 0.)
-        init.constant(self.c0, 0.)
-
-    def forward(self, inputs):
-        if inputs.size() != (self.input_size,):
-            raise ValueError(f'expected input to have size ({self.input_size},), got {tuple(inputs.size())}')
-        assert self._states_hist
-
-        # Set seq_len and batch_size to 1
-        inputs = inputs.view(self.SEQ_LEN, self.BATCH_SIZE, inputs.numel())
-        next_outputs, next_states = self.lstm(inputs, self._states_hist[-1])
-        self._states_hist.append(next_states)
-        # self._outputs_hist.append(next_outputs)
-        return next_states
-
-    def push(self, *args, **kwargs):
-        return self(*args, **kwargs)
-
-    def pop(self):
-        if len(self._states_hist) > 1:
-            self._outputs_hist.pop()
-            return self._states_hist.pop()
-        else:
-            raise self.EmptyStackError()
-
-    @property
-    def top(self):
-        # outputs: hidden_size
-        return self._outputs_hist[-1].squeeze() if self._outputs_hist else None
-
-    def __repr__(self) -> str:
-        res = ('{}(input_size={input_size}, hidden_size={hidden_size}, '
-               'num_layers={num_layers}, dropout={dropout})')
-        return res.format(self.__class__.__name__, **self.__dict__)
-
-    def __len__(self):
-        return len(self._outputs_hist)

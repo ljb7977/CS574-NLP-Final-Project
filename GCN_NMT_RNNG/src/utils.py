@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.nn import init
 import re
 import pickle
-import scipy.sparse as sparse
+# import scipy.sparse as sparse
 import numpy as np
 
 
@@ -56,27 +56,27 @@ def lstm_init_uniform_weights(lstm, scale):
 def linear_init(l, scale):
     l.weight.data.uniform_(0.0, scale)
     l.bias.data.fill_(0)
-
-def sparse_to_tuple(sparse_mx):
-    """
-    Convert sparse matrix to tuple representation.
-    Source: https://github.com/tkipf/gcn
-    """
-    def to_tuple(mx):
-        if not sparse.isspmatrix_coo(mx):
-            mx = mx.tocoo()
-        coords = np.vstack((mx.row, mx.col)).transpose()
-        values = mx.data
-        shape = mx.shape
-        return coords, values, shape
-    if isinstance(sparse_mx, list):
-        for i in range(len(sparse_mx)):
-            sparse_mx[i] = to_tuple(sparse_mx[i])
-    else:
-        sparse_mx = to_tuple(sparse_mx)
-    return sparse_mx
-
-
+#
+# def sparse_to_tuple(sparse_mx):
+#     """
+#     Convert sparse matrix to tuple representation.
+#     Source: https://github.com/tkipf/gcn
+#     """
+#     def to_tuple(mx):
+#         if not sparse.isspmatrix_coo(mx):
+#             mx = mx.tocoo()
+#         coords = np.vstack((mx.row, mx.col)).transpose()
+#         values = mx.data
+#         shape = mx.shape
+#         return coords, values, shape
+#     if isinstance(sparse_mx, list):
+#         for i in range(len(sparse_mx)):
+#             sparse_mx[i] = to_tuple(sparse_mx[i])
+#     else:
+#         sparse_mx = to_tuple(sparse_mx)
+#     return sparse_mx
+#
+#
 
 
 
