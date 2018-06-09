@@ -348,11 +348,6 @@ class NMT_RNNG(nn.Module):
         output, (enc_h1, enc_c1) = self.encode(self.sourceEmbed, (enc_h0, enc_c0))
         enc_output = output.view(-1, self.hiddenEncDim * 2)
 
-        j, k, top = 0, 0, 0
-        k += 1
-
-        # i == 0
-
         s_tilde = enc_h1.view(1, self.hiddenEncDim * 2)
         dec_h1 = F.relu(self.decInitAffine(enc_h1)).view(1, -1)
         dec_c1 = torch.rand(self.hiddenDim).view(1, -1)

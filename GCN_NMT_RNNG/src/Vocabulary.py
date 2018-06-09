@@ -63,6 +63,8 @@ class Vocabulary(object):
                 self.tokenList.append((token, count, 2))
             else:
                 print("Error: Non shift/reduce word.")
+        self.tokenList.append(('REDUCE-RIGHT-ARC(unk)', 0, 2))
+        self.tokenList.append(('REDUCE-LEFT-ARC(unk)', 0, 1))
         self.tokenList.sort(key=itemgetter(1))
         self.tokenList.reverse()  # (token, count, actionIndex) tuple이 count가 큰 순서로 정렬
         tokenList_len = len(self.tokenList)
