@@ -32,27 +32,27 @@ class Translator(object):
                  deprelLabelThreshold,
                  printEvery):
         if prepocessed:
-            tgtTrain = '../data/processed/train.en'
-            actTrain = '../data/processed/train.oracle.en'
-            tgtDev = '../data/processed/dev.en'
-            actDev = '../data/processed/dev.oracle.en'
-            #tgtTest = '../data/processed/test.en'
-            #actTest = '../data/processed/test.oracle.en'
-            srcTrain = '../data/processed/train.kr'
-            deprelTrain = '../data/processed/train.deprel.kr'
-            srcDev = '../data/processed/dev.kr'
-            deprelDev = '../data/processed/dev.deprel.kr'
-            #srcTest = '../data/processed/test.kr'
-            #deprelTest = '../data/processed/test.deprel.kr'
+            tgtTrain = './data/processed/train.en'
+            actTrain = './data/processed/train.oracle.en'
+            tgtDev = './data/processed/dev.en'
+            actDev = './data/processed/dev.oracle.en'
+            #tgtTest = './data/processed/test.en'
+            #actTest = './data/processed/test.oracle.en'
+            srcTrain = './data/processed/train.kr'
+            deprelTrain = './data/processed/train.deprel.kr'
+            srcDev = './data/processed/dev.kr'
+            deprelDev = './data/processed/dev.deprel.kr'
+            #srcTest = './data/processed/test.kr'
+            #deprelTest = './data/processed/test.deprel.kr'
         else:
-            devNum = 100
+            devNum = 500
             trainNum = 5000
             print('Parsing target file into plain sentences & actions...')
-            tgtTrain, actTrain = self.conll_to_action('../data/tagged_train.en', trainNum)
-            tgtDev, actDev = self.conll_to_action('../data/tagged_dev.en', devNum)
+            tgtTrain, actTrain = self.conll_to_action('./data/tagged_train.en', trainNum)
+            tgtDev, actDev = self.conll_to_action('./data/tagged_dev.en', devNum)
             print('Parsing source file into plain sentences & dependency relations...')
-            srcTrain, deprelTrain = self.conll_to_deprels('../data/tagged_train.kr', trainNum)
-            srcDev, deprelDev = self.conll_to_deprels('../data/tagged_dev.kr', devNum)
+            srcTrain, deprelTrain = self.conll_to_deprels('./data/tagged_train.kr', trainNum)
+            srcDev, deprelDev = self.conll_to_deprels('./data/tagged_dev.kr', devNum)
 
         print('Loading processed data...')
         self.sourceVoc = Vocabulary(srcTrain, srcVocaThreshold, 'lang')
@@ -135,11 +135,11 @@ class Translator(object):
             #     f.write(str(dot))
             loss_val = round(loss.item(), 2)/len(batch_trainData)
             print("loss: ", loss_val)
-            print("processing backward() and optimizer.step()...")
+            print("\nProcessing backward() and optimizer.step()...")
             loss.backward()
             optimizer.step()
-            print("done...")
-            print("compute BLEU score")
+            print("Done...")
+            print("\nCompute BLEU score\n")
             self.computeBLEU()
 
 
@@ -231,14 +231,14 @@ class Translator(object):
     def conll_to_action(self, tgt, num_):
         cnt = 0
         if 'dev' in tgt:
-            oracle_fname = '../data/processed/dev.oracle.en'
-            txt_fname = '../data/processed/dev.en'
+            oracle_fname = './data/processed/dev.oracle.en'
+            txt_fname = './data/processed/dev.en'
         elif 'test' in tgt:
-            oracle_fname = '../data/processed/test.oracle.en'
-            txt_fname = '../data/processed/test.en'
+            oracle_fname = './data/processed/test.oracle.en'
+            txt_fname = './data/processed/test.en'
         elif 'train' in tgt:
-            oracle_fname = '../data/processed/train.oracle.en'
-            txt_fname = '../data/processed/train.en'
+            oracle_fname = './data/processed/train.oracle.en'
+            txt_fname = './data/processed/train.en'
         else:
             print('Error: invalid file name of ' + tgt)
             exit(1)
@@ -286,14 +286,14 @@ class Translator(object):
     def conll_to_deprels(self, src, num_):
         cnt = 0
         if 'dev' in src:
-            deprels_fname = '../data/processed/dev.deprel.kr'
-            txt_fname = '../data/processed/dev.kr'
+            deprels_fname = './data/processed/dev.deprel.kr'
+            txt_fname = './data/processed/dev.kr'
         elif 'test' in src:
-            deprels_fname = '../data/processed/test.deprel.kr'
-            txt_fname = '../data/processed/test.kr'
+            deprels_fname = './data/processed/test.deprel.kr'
+            txt_fname = './data/processed/test.kr'
         elif 'train' in src:
-            deprels_fname = '../data/processed/train.deprel.kr'
-            txt_fname = '../data/processed/train.kr'
+            deprels_fname = './data/processed/train.deprel.kr'
+            txt_fname = './data/processed/train.kr'
         else:
             print('Error: invalid file name of ' + src)
             exit(1)

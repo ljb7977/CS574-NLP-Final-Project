@@ -1,1 +1,1 @@
-python3 ./test.py arg1 arg2 arg3
+python3 ./src/train.py
