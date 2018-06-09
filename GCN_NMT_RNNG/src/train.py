@@ -3,13 +3,18 @@ sys.path.insert(0, './src')
 
 import Translator
 
-
+#   trainSize < 100000
+#   testSize < 10001
+#   devSize < 10001
 t = Translator.Translator(mode='train',
                           prepocessed=False ,
                           srcVocaThreshold=1,
                           tgtVocaThreshold=1,
                           deprelLabelThreshold=1,
-                          printEvery=50)
+                          printEvery=50,
+                          trainSize=30000,
+                          testSize=500,
+                          devSize=300)
 
 t.demo(inputDim=256,
        inputActDim=128,
