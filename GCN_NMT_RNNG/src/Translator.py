@@ -7,7 +7,7 @@ from Models import NMT_RNNG
 import re
 import random
 import math
-
+from torchviz import make_dot, make_dot_from_trace
 
 class Data(object):
     def __init__(self):
@@ -37,6 +37,8 @@ class Translator(object):
         self.devData = self.loadCorpus(srcDev, tgtDev, actDev, self.devData)
 
     def train(self, criterion, NLL, optimizer, train=True):
+        for idx in self.trainData[0].src:
+            print(self.sourceVoc.tokenList[idx][0], end=" ")
         permutation = list(range(0, len(self.trainData)))
         random.shuffle(permutation)
         batchNumber = int(math.ceil(len(self.trainData) / self.miniBatchSize))
@@ -61,21 +63,35 @@ class Translator(object):
                 enc_hidden = self.model.enc_init_hidden()
                 uts, s_tildes = self.model(train_src, train_tgt, train_action, src_length, enc_hidden, criterion)
 
-                # Backward(Action)
-                loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
-
                 predicted_words = F.log_softmax(s_tildes.view(-1, len(self.targetVoc.tokenList)), dim=1)
+                torch.set_printoptions(threshold=10000)
                 print(predicted_words[0])
 
+                print("source: ", end="")
+                for i in data_in_batch.src:
+                    print(self.sourceVoc.tokenList[i][0], end=" ")
+                print("\ngold: ", end="")
+                for i in data_in_batch.tgt:
+                    print(self.targetVoc.tokenList[i][0], end=" ")
+                print("\ntarget: ", end="")
                 for i in range(list(predicted_words.shape)[0]):
                     topv, topi = predicted_words[i].topk(1)
                     print(self.targetVoc.tokenList[topi][0], end=" ")
                 print("")
+
+                loss_t = 0
                 for i in range(min(list(predicted_words.shape)[0], len(train_tgt))):
-                    loss += NLL(predicted_words[i].view(1, -1), torch.LongTensor([train_tgt[i]]))
+                    loss_t += NLL(predicted_words[i].view(1, -1), torch.LongTensor([train_tgt[i]]))
+                loss = loss_t / min(list(predicted_words.shape)[0], len(train_tgt))
+
+                # Backward(Action)
+                loss += criterion(uts.view(-1, len(self.actionVoc.tokenList)), train_action)
 
             # act_loss.backward(retain_graph=True)
-            loss.backward(retain_graph=True)
+            # print(dict(self.model.named_parameters()))
+            make_dot(s_tildes, params=dict(self.model.named_parameters()))
+            # loss.backward(retain_graph=True)
+            loss.backward()
             optimizer.step()
             print("loss: ", round(loss.item(), 2))
         return
