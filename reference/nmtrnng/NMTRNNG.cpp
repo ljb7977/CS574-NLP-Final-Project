@@ -1121,8 +1121,7 @@ void NMTRNNG::train(NMTRNNG::Data *data,
             /* Attention's Backpropagation */
             // arg.del_stilde
             if (j < (arg.tgtLen - 1)) {
-                arg.del_stilde[j].noalias() += arg.decState[j +
-                                                            1]->dela; // add gradients to the previous arg.del_stilde
+                arg.del_stilde[j].noalias() += arg.decState[j + 1]->dela; // add gradients to the previous arg.del_stilde
                 // by input-feeding [Luong et al., EMNLP2015]
             } else {}
 

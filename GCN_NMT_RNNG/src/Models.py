@@ -56,7 +56,6 @@ class NMT_RNNG(nn.Module):
         self.useGCN = useGCN
         self.gcnDim = gcnDim
 
-        # TODO init
         self.stack = Stack()
         self.headList = []
         self.embedList = []
@@ -132,8 +131,6 @@ class NMT_RNNG(nn.Module):
         self.dec = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
         self.dec.bias_ih.data = torch.ones(4 * self.hiddenDim)
         self.dec.bias_hh.data = torch.ones(4 * self.hiddenDim)
-        # utils.lstm_init_uniform_weights(self.dec, self.scale)
-        # utils.set_forget_bias(self.enc, 1.0)
 
         # action
         self.act = nn.LSTM(input_size=self.inputActDim, hidden_size=self.hiddenActDim)
@@ -143,11 +140,6 @@ class NMT_RNNG(nn.Module):
         self.outBufCell = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         self.outBufCell.bias_ih.data = torch.ones(4 * self.hiddenDim)
         self.outBufCell.bias_hh.data = torch.ones(4 * self.hiddenDim)
-
-        # out buffer, RNNG stack
-        # self.outBuf = StackLSTM(input_size=self.inputDim, hidden_size=self.hiddenDim)
-        # utils.lstm_init_uniform_weights(self.outBuf, self.scale)
-        # utils.set_forget_bias(self.outBuf, 1.0)
 
         # affine
         # linear later들 전부 activation function이 tanh인데 이건 forward에서 해야함
@@ -245,7 +237,6 @@ class NMT_RNNG(nn.Module):
         for i in range(1, len(actions)):
             actNum = actions[i]
             actout, (act_h1, act_c1) = self.act(self.actionEmbed[i-1].view(1, 1, -1), (act_h1, act_c1))
-            # act_h1, act_c1 = self.decoderAction(self.actionEmbed[i - 1])  # put prev action
             if self.getAction(actNum) == 0:  # shift action
                 self.headStack.push(k)  # push to headStack
                 dec_h1, dec_c1 = self.decoder(s_tilde, dec_h1, dec_c1)  # TODO decoder forward 1 step with stilde
@@ -257,7 +248,7 @@ class NMT_RNNG(nn.Module):
                     h1, c1 = self.outBufCell(self.targetEmbed[j].view(1, -1), self.outBuf[k - 1])
                     self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
                 else:
-                    h1, c1 = self.outBufCell(torch.zeros(1, self.hiddenDim), self.outBuf[k - 1])
+                    h1, c1 = self.outBufCell(torch.zeros(1, self.inputDim), self.outBuf[k - 1])
                     self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
                 self.embedStack.push(j)
                 s_tildes.append(s_tilde)
@@ -294,21 +285,10 @@ class NMT_RNNG(nn.Module):
         return output, (last_state, last_cell)
 
     def decoder(self, input, h0, c0):
-        # lstm = nn.LSTMCell(input_size=self.hiddenDim, hidden_size=self.hiddenDim)
-        # #TODO initialize this LSTMcell
-        # if args:
-        #     h0, c0 = args[:2]
-        #     h1, c1 = lstm(input, (h0, c0))  # self.dec(input, dec_hidden)
-        # else:
-        #     h1, c1 = lstm(input)
         h1, c1 = self.dec(input, (h0, c0))
         return h1, c1
 
     def decoderAction(self, action):  # call forward for action LSTM
-        # if args:
-        #     h0, c0 = args[0], args[1]
-        #     h1, c1 = self.act(action, (h0, c0))
-        # else:
         h1, c1 = self.act(action)
         return h1, c1
 
@@ -322,9 +302,7 @@ class NMT_RNNG(nn.Module):
         return context_vec
 
     def decoderAttention(self, dec_hidden, context_vec):  # calc context vector and concat, linear and tanh
-        # print("h0, c", dec_hidden.shape, context_vec.shape)
         dec_hidden = torch.cat((dec_hidden, context_vec), 1)
-        # print("concat", dec_hidden.shape)
         return F.relu(self.stildeAffine(dec_hidden))  # return s_tilde
 
     def compositionFunc(self, head, dependent, relation):
@@ -360,10 +338,8 @@ class NMT_RNNG(nn.Module):
         relation = self.actionEmbed[actNum]
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(head, dependent, relation)
 
-        # outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         h1, c1 = self.outBufCell(self.embedVec[phraseNum - self.tgtLen].view(1, -1), self.outBuf[top])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
-        # print(self.outBuf)
         self.embedStack.push(phraseNum)
         return
 
@@ -396,7 +372,6 @@ class NMT_RNNG(nn.Module):
         relation = self.actionEmbed[actNum]
         self.embedVec[phraseNum - self.tgtLen] = self.compositionFunc(head, dependent, relation)
 
-        # outBuf = nn.LSTMCell(input_size=self.inputDim, hidden_size=self.hiddenDim)
         h1, c1 = self.outBufCell(self.embedVec[phraseNum - self.tgtLen].view(1, -1), self.outBuf[top])
         self.outBuf.append((h1, c1))  # add h and c to outBuf[k]
         self.embedStack.push(phraseNum)
@@ -421,7 +396,6 @@ class NMT_RNNG(nn.Module):
 
         s_tildes = self.wordPredAffine(torch.stack(s_tildes))
         return s_tildes
-
 
 class Stack():
     def __init__(self):
