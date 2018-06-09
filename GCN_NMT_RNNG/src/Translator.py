@@ -186,7 +186,7 @@ class Translator(object):
                         data[-1].src.append(self.sourceVoc.tokenIndex[token])
                     else:
                         data[-1].src.append(self.sourceVoc.unkIndex)
-                # data[-1].src.append(self.sourceVoc.eosIndex)
+                data[-1].src.append(self.sourceVoc.eosIndex)
         idx = 0
         with open(tgt, encoding="utf-8") as f:
             for line in f:
@@ -197,7 +197,7 @@ class Translator(object):
                         data[idx].tgt.append(self.targetVoc.tokenIndex[token])
                     else:
                         data[idx].tgt.append(self.targetVoc.unkIndex)
-                # data[idx].tgt.append(self.targetVoc.eosIndex)
+                data[idx].tgt.append(self.targetVoc.eosIndex)
                 idx += 1
         idx = 0
         with open(act) as f:

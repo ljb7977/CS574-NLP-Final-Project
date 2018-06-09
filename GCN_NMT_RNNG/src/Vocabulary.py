@@ -37,9 +37,9 @@ class Vocabulary(object):
         tokenList_len = len(self.tokenList)
         for i in range(tokenList_len):
             self.tokenIndex[self.tokenList[i][0]] = i
-        # self.eosIndex = tokenList_len
-        # self.tokenList.append(("*EOS*", eosCount))
-        self.unkIndex = tokenList_len
+        self.eosIndex = tokenList_len
+        self.tokenList.append(("*EOS*", eosCount))
+        self.unkIndex = tokenList_len+1
         self.tokenList.append(("*UNK*", unkCount))
 
     def initAction(self, trainFile):
