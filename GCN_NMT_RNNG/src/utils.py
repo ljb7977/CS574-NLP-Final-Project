@@ -2,6 +2,42 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
+import re
+import pickle
+import scipy.sparse as sparse
+import numpy as np
+
+
+class Node(object):
+    def __init__(self, num, head, label):
+        self.num = num
+        self.head = head
+        self.label = label
+
+
+def write_oracle(buffer, buffer_child_to_head_dict):
+    arcs = []
+    stack = []
+    while len(buffer) > 0 or len(stack) != 1:
+        if len(stack) > 1 and stack[-1].num == stack[-2].head:
+            arcs.append('REDUCE-LEFT-ARC(' + stack[-1].label + ')')
+            stack.pop(-2)
+        elif len(stack) > 1 and stack[-2].num == stack[-1].head:
+            if stack[-1].num in buffer_child_to_head_dict.values():
+                arcs.append('SHIFT')
+                del buffer_child_to_head_dict[buffer[0].num]
+                stack.append(buffer.pop(0))
+            else:
+                arcs.append('REDUCE-RIGHT-ARC(' + stack[-2].label + ')')
+                stack.pop(-1)
+        elif len(buffer) > 0:
+            arcs.append('SHIFT')
+            del buffer_child_to_head_dict[buffer[0].num]
+            stack.append(buffer.pop(0))
+        else:
+            # stack에 독립 item 존재
+            break
+    return arcs
 
 def set_forget_bias(lstm, num):
     for names in lstm._all_weights:
@@ -20,3 +56,54 @@ def lstm_init_uniform_weights(lstm, scale):
 def linear_init(l, scale):
     l.weight.data.uniform_(0.0, scale)
     l.bias.data.fill_(0)
+
+def sparse_to_tuple(sparse_mx):
+    """
+    Convert sparse matrix to tuple representation.
+    Source: https://github.com/tkipf/gcn
+    """
+    def to_tuple(mx):
+        if not sparse.isspmatrix_coo(mx):
+            mx = mx.tocoo()
+        coords = np.vstack((mx.row, mx.col)).transpose()
+        values = mx.data
+        shape = mx.shape
+        return coords, values, shape
+    if isinstance(sparse_mx, list):
+        for i in range(len(sparse_mx)):
+            sparse_mx[i] = to_tuple(sparse_mx[i])
+    else:
+        sparse_mx = to_tuple(sparse_mx)
+    return sparse_mx
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

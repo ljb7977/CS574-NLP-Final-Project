@@ -4,12 +4,15 @@ import torch.nn.functional as F
 from torch.nn import init
 import utils, copy
 from torch.autograd import Variable
+import networkx as nx
+import scipy.sparse as sparse
 
 class NMT_RNNG(nn.Module):
     def __init__(self,
                  sourceVoc,
                  targetVoc,
                  actionVoc,
+                 deprelVoc,
                  trainData,
                  devData,
                  inputDim,
@@ -26,11 +29,13 @@ class NMT_RNNG(nn.Module):
                  learningRate,
                  isTest,
                  startIter,
-                 saveDirName):
+                 saveDirName,
+                 useGCN):
         super(NMT_RNNG, self).__init__()
         self.sourceVoc = sourceVoc
         self.targetVoc = targetVoc
         self.actionVoc = actionVoc
+        self.deprelVoc = deprelVoc
         self.trainData = trainData
         self.devData = devData
         self.inputDim = inputDim
@@ -69,7 +74,39 @@ class NMT_RNNG(nn.Module):
         self.enc = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenEncDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.enc, self.scale)
         utils.set_forget_bias(self.enc, 1.0)
+        '''
+        # GCN layer
+        if useGCN:
+            graph = nx.DiGraph()  # graph for adjacency
+            graph_lab = nx.DiGraph()    # graph ofr labels
+            graph.add_nodes_from(range(self.maxLen))
+            graph_lab.add_nodes_from(range(self.maxLen))
+            edges = []
+            for (labelIdx, head, dest) in self.deprelVoc.dirList:
+                edges.append((head, dest, {'deprel': str(labelIdx)}))
+            graph.add_edges_from(edges)
 
+            # get adjacency matrix from the graph
+            graph_lab.add_edges_from(edges)
+            adj = nx.adjacency_matrix(graph)
+            labels = nx.adjacency_matrix(graph_lab, weight='deprel')
+
+            # incoming edges become outgoing edges (i->j), dep to head
+            adj_inv = nx.adjacency_matrix(graph.reverse())
+            labels_inv = nx.adjacency_matrix(graph_lab.reverse(), weight='deprel')
+
+            # conversion to SparseTensor format (tuples of coords, values, shape)
+            adj = utils.sparse_to_tuple(adj)
+            adj_inv = utils.sparse_to_tuple(adj_inv)
+            labels = utils.sparse_to_tuple(labels)
+            labels_inv = utils.sparse_to_tuple(labels_inv)
+
+            print(adj)
+
+            self.num_labels = len(self.deprelVoc.tokenList)
+            #self.conv1 = nn.Conv1d(self.hiddenEncDim*2, self.maxLen,)
+            #self.w = Variable(torch.Tensor(self.))
+        '''
         # decoder
         self.dec = nn.LSTM(input_size=self.inputDim, hidden_size=self.hiddenDim, bidirectional=True)
         utils.lstm_init_uniform_weights(self.dec, self.scale)
@@ -77,12 +114,6 @@ class NMT_RNNG(nn.Module):
 
         # action
         self.act = StackLSTM(input_size=self.inputActDim, hidden_size=self.hiddenActDim)
-        #utils.lstm_init_uniform_weights(self.act, self.scale)
-        #utils.set_forget_bias(self.act, 1.0)
-        # out buffer, RNNG stack
-        # self.outBuf = StackLSTM(input_size=self.inputDim, hidden_size=self.hiddenDim)
-        #utils.lstm_init_uniform_weights(self.outBuf, self.scale)
-        #utils.set_forget_bias(self.outBuf, 1.0)
 
         # affine
         # linear later들 전부 activation function이 tanh인데 이건 forward에서 해야함
@@ -109,12 +140,6 @@ class NMT_RNNG(nn.Module):
         utils.linear_init(self.actionPredAffine, self.scale)
         self.wordPredAffine = nn.Linear(self.hiddenDim, len(self.targetVoc.tokenList))
         utils.linear_init(self.wordPredAffine, self.scale)
-
-        # # embedding matrices는 보통 inputDim*len(Voc)형태로 만들어져야하는데, 일단 보류
-        # self.targetEmbed = torch.Tensor(self.inputDim, len(self.targetVoc.tokenList))
-        # init.uniform_(self.targetEmbed, 0., self.scale)
-        # self.actionEmbed = torch.Tensor(self.inputActDim, len(self.actionVoc.tokenList))
-        # init.uniform_(self.actionEmbed, 0., self.scale)
 
         self.zeros = torch.zeros(self.hiddenDim)
         self.zerosEnc = torch.zeros(self.hiddenEncDim)
@@ -153,7 +178,7 @@ class NMT_RNNG(nn.Module):
         # i == 0
         act_h1, act_c1 = self.decoderAction(self.actionEmbed[0])
         # 일단 0일때는 action 0으로 설정
-        #처음 액션은 무조건 shift이므로, 그것만 처리한다.
+        # 처음 액션은 무조건 shift이므로, 그것만 처리한다.
 
         self.headStack.push(k)
         enc_last_state = enc_last_state.view(1, self.hiddenEncDim * 2)

@@ -7,6 +7,8 @@ from Models import NMT_RNNG
 import re
 import random
 import math
+import utils
+import pickle
 
 
 class Data(object):
@@ -14,27 +16,34 @@ class Data(object):
         self.src = []
         self.tgt = []
         self.action = []
-        self.trans = [] # output of decoder
+        self.deprel = []
+        self.trans = []     # output of decoder
 
 
 class Translator(object):
     def __init__(self,
-                 srcTrain,
-                 tgtTrain,
-                 actTrain,
-                 srcDev,
-                 tgtDev,
-                 actDev,
+                 srcTrain_tagged,
+                 tgtTrain_tagged,
+                 srcDev_tagged,
+                 tgtDev_tagged,
                  srcVocaThreshold,
-                 tgtVocaThreshold):
+                 tgtVocaThreshold,
+                 deprelLabelThreshold):
+        print('Parsing target file into plain sentences & actions...')
+        tgtTrain, actTrain = self.conll_to_action(tgtTrain_tagged)
+        tgtDev, actDev = self.conll_to_action(tgtDev_tagged)
+        print('Parsing source file into plain sentences & dependency relations...')
+        srcTrain, deprelTrain = self.conll_to_deprels(srcTrain_tagged)
+        srcDev, deprelDev = self.conll_to_deprels(srcDev_tagged)
 
         self.sourceVoc = Vocabulary(srcTrain, srcVocaThreshold, 'lang')
         self.targetVoc = Vocabulary(tgtTrain, tgtVocaThreshold, 'lang')
         self.actionVoc = Vocabulary(actTrain, None, 'action')
+        self.deprelVoc = Vocabulary(deprelTrain, deprelLabelThreshold, 'deprel')
         self.trainData = []
         self.devData = []
-        self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, self.trainData)
-        self.devData = self.loadCorpus(srcDev, tgtDev, actDev, self.devData)
+        self.trainData = self.loadCorpus(srcTrain, tgtTrain, actTrain, deprelTrain,  self.trainData)
+        self.devData = self.loadCorpus(srcDev, tgtDev, actDev, deprelDev, self.devData)
 
     def train(self, criterion, NLL, optimizer, train=True):
         permutation = list(range(0, len(self.trainData)))
@@ -87,7 +96,7 @@ class Translator(object):
             # print("act_loss:", round(float(act_loss), 2))
         return
 
-    def loadCorpus(self, src, tgt, act, data):
+    def loadCorpus(self, src, tgt, act, deprel, data):
         with open(src, encoding="utf-8") as f:
             for line in f:
                 data.append(Data())
@@ -128,7 +137,110 @@ class Translator(object):
                             print("Error: Unknown word except shift/reduce.")
                 else:
                     idx += 1
+        idx = 0
+        deprel_list = pickle.load(open(deprel, 'rb'))
+        for dep_sen in deprel_list:
+            for dep_word in dep_sen:
+                label = dep_word[0]
+                if label in self.deprelVoc.tokenIndex:
+                    data[idx].deprel.append((self.deprelVoc.tokenIndex[label], dep_word[1], dep_word[2]))
+                else:
+                    data[idx].deprel.append((self.deprelVoc.unkIndex, dep_word[1], dep_word[2]))
+            idx += 1
         return data
+
+    def conll_to_action(self, tgt):
+        if 'dev' in tgt:
+            oracle_fname = '../data/processed/dev.oracle.en'
+            txt_fname = '../data/processed/dev.en'
+        elif 'test' in tgt:
+            oracle_fname = '../data/processed/test.oracle.en'
+            txt_fname = '../data/processed/test.en'
+        elif 'train' in tgt:
+            oracle_fname = '../data/processed/train.oracle.en'
+            txt_fname = '../data/processed/train.en'
+        else:
+            print('Error: invalid file name of ' + tgt)
+            exit(1)
+        oracle_f = open(oracle_fname, 'w', encoding='utf-8')
+        plain_f = open(txt_fname, 'w', encoding='utf-8')
+        tagged_file = open(tgt, 'r', encoding='utf-8')
+        bulk = tagged_file.read()
+        blocks = re.compile(r"\n{2,}").split(bulk)
+        blocks = list(filter(None, blocks))
+        for block in blocks:
+            tokens = []
+            buffer = []
+            child_to_head_dict = {}
+            for line in block.splitlines():
+                attr_list = line.split('\t')
+                tokens.append(attr_list[1])
+                num = int(attr_list[0])
+                head = int(attr_list[6])
+                label = attr_list[7]
+                node = utils.Node(num, head, label)
+                child_to_head_dict[num] = head
+                buffer.append(node)
+            arcs = utils.write_oracle(buffer, child_to_head_dict)
+            for i, token in enumerate(tokens):
+                token_lowered = token.lower()
+                if i == 0:
+                    plain_f.write(token_lowered)
+                else:
+                    plain_f.write(' ')
+                    plain_f.write(token_lowered)
+            plain_f.write('\n')
+            for arc in arcs:
+                oracle_f.write(arc + '\n')
+            oracle_f.write('\n')
+        tagged_file.close()
+        oracle_f.close()
+        plain_f.close()
+        return txt_fname, oracle_fname
+
+    def conll_to_deprels(self, src):
+        if 'dev' in src:
+            deprels_fname = '../data/processed/dev.deprel.kr'
+            txt_fname = '../data/processed/dev.kr'
+        elif 'test' in src:
+            deprels_fname = '../data/processed/test.deprel.kr'
+            txt_fname = '../data/processed/test.kr'
+        elif 'train' in src:
+            deprels_fname = '../data/processed/train.deprel.kr'
+            txt_fname = '../data/processed/train.kr'
+        else:
+            print('Error: invalid file name of ' + src)
+            exit(1)
+        deprels_f = open(deprels_fname, 'wb')
+        plain_f = open(txt_fname, 'w', encoding='utf-8')
+        tagged_file = open(src, 'r', encoding='utf-8')
+        bulk = tagged_file.read()
+        blocks = re.compile(r"\n{2,}").split(bulk)
+        blocks = list(filter(None, blocks))
+        deprels = []
+        for block in blocks:
+            deprel = []
+            tokens = []
+            for line in block.splitlines():
+                attr_list = line.split('\t')
+                tokens.append(attr_list[1])
+                num = int(attr_list[0])
+                head = int(attr_list[6])
+                label = attr_list[7]
+                deprel.append((label, head, num))
+            deprels.append(deprel)
+            for i, token in enumerate(tokens):
+                if i == 0:
+                    plain_f.write(token)
+                else:
+                    plain_f.write(' ')
+                    plain_f.write(token)
+            plain_f.write('\n')
+        pickle.dump(deprels, deprels_f)
+        tagged_file.close()
+        deprels_f.close()
+        plain_f.close()
+        return txt_fname, deprels_fname
 
     def demo(self,
              inputDim,
@@ -147,11 +259,13 @@ class Translator(object):
              loadModelName,
              loadGradName,
              startIter,
-             epochs):
+             epochs,
+             useGCN):
         self.miniBatchSize = miniBatchSize
         self.model = NMT_RNNG(self.sourceVoc,
                               self.targetVoc,
                               self.actionVoc,
+                              self.deprelVoc,
                               self.trainData,
                               self.devData,
                               inputDim,
@@ -168,7 +282,8 @@ class Translator(object):
                               learningRate,
                               False,
                               0,
-                              saveDirName)
+                              saveDirName,
+                              useGCN)
 
         translation = []    # 결과, 나중에 devData와 같은 길이의 list가 됨.
         optimizer = optim.Adam(self.model.parameters(), lr=learningRate, weight_decay=0.005, amsgrad=True)
@@ -179,6 +294,7 @@ class Translator(object):
         print("Source voc size: " + str(len(self.sourceVoc.tokenList)))
         print("Target voc size: " + str(len(self.targetVoc.tokenList)))
         print("Action voc size: " + str(len(self.actionVoc.tokenList)))
+        print("Dependency Label voc size: " + str(len(self.deprelVoc.tokenList)))
 
         for i in range(epochs):
             print("Epoch " + str(i+1) + ' (lr = ' + str(self.model.learningRate) + ')')
