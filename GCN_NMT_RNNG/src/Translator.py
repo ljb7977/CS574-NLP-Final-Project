@@ -147,7 +147,6 @@ class Translator(object):
             print("\nCompute BLEU score\n")
             self.computeBLEU()
 
-
     def computeBLEU(self):
         predictedSentences = []
         goldSentences = []
